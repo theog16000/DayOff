@@ -1,0 +1,1101 @@
+/* ============================================================
+   VARIABLES GLOBALES
+   ============================================================ */
+:root {
+  --fond: #f3f4f6;
+  --fond-secondaire: #ffffff;
+  --bouton-bleu: #3f81ea;
+  --bouton-bleu-hover: #3367d6;
+  --texte-secondaire: #ffffff;
+  --texte-noir: #1f2937;
+  --texte-gris: #6b7280;
+  --texte-clair: #9ca3af;
+  --bordure: #e5e7eb;
+  --gris-ligne: #eeeeee;
+  --danger: #ef4444;
+  --success: #10b981;
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+body {
+  background-color: var(--fond);
+  margin: 0;
+  display: flex;
+  font-family: "Inter", sans-serif;
+}
+
+button {
+  color: var(--texte-secondaire);
+  background-color: var(--bouton-bleu);
+  font-weight: 700;
+  width: 100%;
+  height: 3em;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+hr {
+  width: 85%;
+  border: none;
+  border-top: 1px solid var(--gris-ligne);
+  margin: 15px auto;
+}
+
+/* ============================================================
+   MENU LATÉRAL
+   ============================================================ */
+.menu {
+  width: 18.875em;
+  min-height: 100vh;
+  background-color: var(--fond-secondaire);
+  display: flex;
+  flex-direction: column;
+  /* On retire position: sticky et top: 0 */
+  position: relative;
+}
+
+header {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+header > h1 {
+  font-weight: 800;
+  margin: 0;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: #333;
+  padding: 12px 25px;
+  font-weight: 500;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+
+.menu-item:hover {
+  background-color: #f8fafc;
+  color: var(--bouton-bleu);
+}
+
+.menu-item i {
+  width: 20px;
+  height: 20px;
+}
+
+/* ============================================================
+   LAYOUT PRINCIPAL
+   ============================================================ */
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 30px;
+}
+
+.global {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.global h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--texte-noir);
+  margin: 0;
+}
+
+/* ============================================================
+   ONGLETS (CORRIGÉ)
+   ============================================================ */
+.tab-content {
+  display: none; /* On enlève le !important ici */
+}
+
+.tab-content.active {
+  display: block !important;
+}
+/* ============================================================
+   PROFIL
+   ============================================================ */
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--fond-secondaire);
+  padding: 8px 16px;
+  border-radius: 50px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.profile img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* ============================================================
+   DASHBOARD — STATS CARDS
+   ============================================================ */
+.dashboard-content {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  flex: 1;
+}
+
+.stat-card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  height: 160px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  color: #666;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.card-body {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.card-body strong {
+  font-size: 3rem;
+  font-weight: 800;
+}
+
+.card-body small {
+  font-size: 1.2rem;
+}
+
+/* ============================================================
+   PROCHAINES ABSENCES
+   ============================================================ */
+.proabsence {
+  width: 280px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.proabsence-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.proabsence-header h6 {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.proabsence ul {
+  padding: 0;
+  margin-bottom: 20px;
+  list-style: none;
+}
+
+.proabsence li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.proabsence .details {
+  width: 100%;
+  background-color: var(--bouton-bleu);
+  color: white;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ============================================================
+   MODALE — DEMANDE DE CONGÉ
+   ============================================================ */
+.demande-container {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px;
+  max-width: 90vw;
+  height: 575px;
+  z-index: 9999;
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid #ddd;
+  animation: apparitionDouce 0.4s ease-out forwards;
+}
+
+@keyframes apparitionDouce {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.form-header h1 {
+  font-size: 1.5rem;
+  margin: 0;
+  font-weight: 700;
+}
+
+.row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--bordure);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.form-group label {
+  font-size: 0.75rem;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  border: none;
+  outline: none;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.summary-box {
+  background: #f9fafb;
+  border: 1px solid var(--bordure);
+  border-radius: 6px;
+  padding: 15px;
+  margin: 20px 0;
+}
+
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-cancel {
+  background: #e5e7eb;
+  color: #333;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  height: auto;
+  width: auto;
+  cursor: pointer;
+}
+
+.btn-submit {
+  background: var(--bouton-bleu);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  height: auto;
+  width: auto;
+  cursor: pointer;
+}
+
+.btn-submit:hover {
+  background: var(--bouton-bleu-hover);
+}
+
+.close-icon {
+  background: none;
+  border: none;
+  width: auto;
+  height: auto;
+  color: #666;
+  cursor: pointer;
+}
+
+/* ============================================================
+   BOUTONS ACTIONS (TABLEAU)
+   ============================================================ */
+.btn-action {
+  background: none;
+  border: 1px solid var(--bouton-bleu);
+  color: var(--bouton-bleu);
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: 0.2s;
+  width: auto;
+  height: auto;
+}
+
+.btn-action:hover {
+  background: var(--bouton-bleu);
+  color: white;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  width: auto;
+  height: auto;
+  color: var(--texte-gris);
+}
+
+.btn-icon i {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-icon.edit {
+  color: var(--bouton-bleu);
+  background-color: rgba(63, 129, 234, 0.1);
+}
+
+.btn-icon.edit:hover {
+  background-color: var(--bouton-bleu);
+  color: white;
+}
+
+.btn-icon.delete {
+  color: var(--danger);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.btn-icon.delete:hover {
+  background-color: var(--danger);
+  color: white;
+}
+
+/* ============================================================
+   FILTRES & RECHERCHE
+   ============================================================ */
+.filtre {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: #666;
+  pointer-events: none;
+  width: 18px;
+  height: 18px;
+}
+
+input[type="search"],
+input[type="text"].search-input {
+  width: 100%;
+  padding: 10px 10px 10px 35px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  font-size: 15px;
+  height: 40px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+select {
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  background-color: white;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.status-select {
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--bordure);
+  padding: 0 10px;
+}
+
+/* ============================================================
+   GESTION LAYOUT (tableau + fiche)
+   ============================================================ */
+.gestion-layout {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+  margin-top: 20px;
+}
+
+.left-side {
+  flex: 1.2;
+}
+
+.right-side {
+  flex: 1;
+}
+
+/* ============================================================
+   TABLEAUX
+   ============================================================ */
+.custom-table {
+  width: 100%;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  border-collapse: collapse;
+}
+
+.custom-table th {
+  background-color: #f8fafc;
+  padding: 12px;
+  text-align: left;
+  font-size: 0.85rem;
+  color: #666;
+  border-bottom: 1px solid var(--gris-ligne);
+}
+
+.custom-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid var(--gris-ligne);
+  vertical-align: middle;
+}
+
+.table-scroll-area {
+  max-height: calc(100vh - 350px);
+  overflow-y: auto;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--bordure);
+}
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+.badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge.actif {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge.inactif {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.badge-cp {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+.badge-maladie {
+  background: #fbe9e7;
+  color: #d84315;
+}
+
+/* ============================================================
+   FICHE UTILISATEUR (droite)
+   ============================================================ */
+.right-body {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+
+.right-body.detail-card {
+  background: white;
+  border-radius: 16px;
+  padding: 25px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+  border: 1px solid #eee;
+  position: sticky;
+  top: 20px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--texte-clair);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 15px 0 10px;
+}
+
+.info-card {
+  background-color: #f5f5f5;
+  border-radius: 12px;
+  padding: 15px;
+  margin: 0 10px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-bottom: 5px;
+}
+
+.info-row span {
+  color: #64748b;
+}
+
+.label {
+  color: #666;
+  font-size: 0.95rem;
+}
+.value {
+  color: #000;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.counter-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: white;
+  border-bottom: 1px solid var(--gris-ligne);
+}
+
+.counter-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.counter-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.counter-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+.counter-controls {
+  display: flex;
+  gap: 20px;
+}
+
+/* ============================================================
+   CONFIGURATION — RÈGLES
+   ============================================================ */
+.rules-container {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 25px;
+  border: 1px solid var(--bordure);
+}
+
+.rules-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 25px;
+  color: var(--texte-noir);
+}
+
+.rules-header h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+}
+.rules-header i {
+  color: var(--bouton-bleu);
+}
+
+.rules-content {
+  display: flex;
+  gap: 40px;
+}
+
+.left-panel,
+.right-panel {
+  flex: 1;
+}
+
+.option-card {
+  display: block;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-card:hover {
+  background-color: #f9fafb;
+}
+.option-card input[type="radio"] {
+  display: none;
+}
+
+.option-card:has(input:checked) {
+  border-color: var(--bouton-bleu);
+  background-color: rgba(63, 129, 234, 0.05);
+}
+
+.card-content {
+  display: flex;
+  gap: 15px;
+}
+
+.radio-circle {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--bordure);
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.option-card input:checked + .card-content .radio-circle {
+  border-color: var(--bouton-bleu);
+}
+
+.option-card input:checked + .card-content .radio-circle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  background: var(--bouton-bleu);
+  border-radius: 50%;
+}
+
+.label-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.label-desc {
+  font-size: 0.8rem;
+  color: var(--texte-gris);
+}
+
+.input-group {
+  background: #f9fafb;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.input-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--texte-noir);
+}
+
+.date-input-wrapper {
+  position: relative;
+}
+
+.date-input-wrapper input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.row-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.radio-group-inline {
+  display: flex;
+  gap: 15px;
+}
+
+/* Acquisition */
+.acquisition-card {
+  background: #f9f9f9;
+  padding: 30px;
+  border-radius: 15px;
+  flex: 1.2;
+}
+
+.quota-value {
+  font-size: 2.2rem;
+  margin: 20px 0;
+}
+.quota-value span {
+  font-size: 1rem;
+  font-weight: normal;
+}
+
+.edit-link {
+  display: inline-block;
+  margin-top: 25px;
+  color: #000;
+  font-weight: bold;
+  text-decoration: underline;
+  font-size: 0.85rem;
+}
+
+.right-panel-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  flex: 1;
+}
+
+.info-block {
+  background: #fcfcfc;
+  padding: 20px;
+  border-radius: 4px;
+}
+
+.split-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Barre de progression */
+.progress-container {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 10px;
+  margin: 15px 0;
+  position: relative;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--bouton-bleu);
+  border-radius: 10px;
+}
+
+/* Tableau des types de congés */
+.table-container {
+  margin: 20px 0;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.leaves-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.leaves-table th {
+  background: #f9fafb;
+  padding: 12px 15px;
+  font-size: 0.7rem;
+  color: var(--texte-gris);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.leaves-table td {
+  padding: 15px;
+  border-top: 1px solid var(--bordure);
+  font-size: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--texte-gris);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  width: auto;
+  height: auto;
+}
+
+.icon-btn:hover {
+  background: #f3f4f6;
+  color: var(--texte-noir);
+}
+.icon-btn.delete:hover {
+  color: var(--danger);
+  background: #fee2e2;
+}
+
+.add-button {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  background: var(--bouton-bleu);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  height: auto;
+}
+
+.add-button:hover {
+  background: var(--bouton-bleu-hover);
+}
+
+/* ============================================================
+   POPUP SUPPRESSION
+   ============================================================ */
+.suppression-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+}
+
+.popup-content {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.popup-content h3 span {
+  color: var(--danger);
+  display: block;
+}
+
+/* ============================================================
+   CALENDRIER FULLCALENDAR
+   ============================================================ */
+#calendrier {
+  min-height: 80vh;
+  width: 100%;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.fc-header-toolbar {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: nowrap !important;
+  width: 100%;
+  margin-bottom: 20px !important;
+}
+
+.fc-button-group {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 2px;
+}
+
+.fc-today-button {
+  margin-right: 8px !important;
+}
+
+.fc .fc-button-primary {
+  background-color: var(--bouton-bleu) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  text-transform: capitalize !important;
+  box-shadow: none !important;
+}
+
+.fc .fc-button-primary:hover {
+  background-color: var(--bouton-bleu-hover) !important;
+}
+
+.fc a {
+  color: var(--texte-noir) !important;
+  text-decoration: none !important;
+}
+
+.fc th a {
+  color: var(--texte-gris) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border: 1px solid var(--bordure) !important;
+}
+
+.fc .fc-day-today {
+  background-color: rgba(63, 129, 234, 0.05) !important;
+}
+.fc .fc-icon {
+  vertical-align: middle !important;
+}
+
+/* ============================================================
+   VALIDATION — BOUTONS APPROUVER / REFUSER
+   ============================================================ */
+.btn-approve {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  height: auto;
+  width: auto;
+}
+
+.btn-refuse {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  height: auto;
+  width: auto;
+}
+
+.btn-approve:hover {
+  background-color: #218838;
+}
+.btn-refuse:hover {
+  background-color: #c82333;
+}
+
+.form-control-sm {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 4px;
+  font-family: inherit;
+}
+
+#calendar {
+  min-height: 600px;
+  font-family: "Inter", sans-serif;
+}
+
+/* On customise les boutons de FullCalendar pour coller à ton thème bleu */
+.fc .fc-button-primary {
+  background-color: var(--bouton-bleu) !important;
+  border-color: var(--bouton-bleu) !important;
+}
+
+.fc .fc-button-primary:hover {
+  background-color: var(--bouton-bleu-hover) !important;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border: 1px solid #f0f0f0 !important;
+}
+
+.fc-event {
+  border: none !important;
+  padding: 3px 8px !important;
+  font-weight: 500 !important;
+}
