@@ -544,7 +544,11 @@ function gcp_install_plugin()
     {
         $pages = [
             'connexion' => 'Connexion',
-            'dashboard-conges' => 'Dashboard Congés'
+            'dashboard-conges' => 'Dashboard Congés',
+            'gcp_reset_page_id' => [
+                'slug' => 'nouveau-mot-de-passe',
+                'title' => 'Définir mon mot de passe'
+            ]
         ];
 
         foreach ($pages as $slug => $title) {
@@ -575,14 +579,48 @@ function gcp_add_new_user_admin()
 {
     if (!current_user_can('manage_options'))
         wp_send_json_error('Refusé');
+
     $email = sanitize_email($_POST['user_email']);
-    $user_id = wp_create_user($email, wp_generate_password(), $email);
-    if (is_wp_error($user_id))
+    $display_name = sanitize_text_field($_POST['display_name']);
+
+    // 1. On crée le compte avec un mot de passe aléatoire temporaire
+    $temp_pass = wp_generate_password();
+    $user_id = wp_create_user($email, $temp_pass, $email);
+
+    if (is_wp_error($user_id)) {
         wp_send_json_error($user_id->get_error_message());
-    wp_update_user(['ID' => $user_id, 'display_name' => sanitize_text_field($_POST['display_name'])]);
+    }
+
+    // 2. Mise à jour du nom et des soldes
+    wp_update_user(['ID' => $user_id, 'display_name' => $display_name]);
     update_user_meta($user_id, 'gcp_solde_cp', floatval($_POST['new_cp']));
     update_user_meta($user_id, 'gcp_solde_rtt', floatval($_POST['new_rtt']));
-    wp_send_json_success('Collaborateur créé !');
+
+    // 3. GÉNÉRATION DU LIEN DE MOT DE PASSE
+    // On génère une clé de réinitialisation pour que ce soit sécurisé
+    $key = get_password_reset_key(get_userdata($user_id));
+    $reset_link = network_site_url("wp-login.php?action=rp&key=$key&login=" . rawurlencode($email), 'login');
+
+    // 4. ENVOI DE L'EMAIL DE BIENVENUE
+    $subject = "Bienvenue sur DayOff — Vos accès";
+    $intro = "Bonjour $display_name, un compte collaborateur a été créé pour vous sur la plateforme DayOff.";
+
+    $details = [
+        'Identifiant' => $email,
+        'Plateforme' => home_url('/connexion'),
+    ];
+
+    gcp_send_email(
+        $email,
+        $subject,
+        "Bienvenue dans l'équipe !",
+        $intro,
+        $details,
+        "Définir mon mot de passe",
+        $reset_link // Le bouton pointera vers la page de changement de MDP
+    );
+
+    wp_send_json_success('Collaborateur créé et email d\'activation envoyé !');
 }
 
 add_action('wp_ajax_update_user_soldes', 'gcp_update_user_soldes');
@@ -707,309 +745,312 @@ function gcp_handle_export_pdf_init()
             'demandes' => $demandes,
         ];
     }
-
+    // Redirige vers ta page de connexion après le changement de mot de passe réussi
+    add_filter('password_reset_redirect', function () {
+        return home_url('/connexion?password=changed');
+    });
     $settings = gcp_get_settings();
     $company_name = $settings['company_name'] ?? get_option('blogname');
     $date_export = date('d/m/Y à H:i');
 
     header('Content-Type: text/html; charset=utf-8');
     ?>
-    <!DOCTYPE html>
-    <html lang="fr">
+        <!DOCTYPE html>
+        <html lang="fr">
 
-    <head>
-        <meta charset="UTF-8">
-        <title>Export DayOff</title>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+        <head>
+            <meta charset="UTF-8">
+            <title>Export DayOff</title>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 12px;
-                color: #1f2937;
-            }
+                body {
+                    font-family: Arial, sans-serif;
+                    font-size: 12px;
+                    color: #1f2937;
+                }
 
-            .page-header {
-                background: #1f2937;
-                color: white;
-                padding: 24px 30px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 30px;
-            }
+                .page-header {
+                    background: #1f2937;
+                    color: white;
+                    padding: 24px 30px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 30px;
+                }
 
-            .page-header h1 {
-                font-size: 20px;
-                font-weight: 700;
-            }
+                .page-header h1 {
+                    font-size: 20px;
+                    font-weight: 700;
+                }
 
-            .page-header .meta {
-                font-size: 11px;
-                opacity: .7;
-                margin-top: 4px;
-            }
+                .page-header .meta {
+                    font-size: 11px;
+                    opacity: .7;
+                    margin-top: 4px;
+                }
 
-            .page-header .badge {
-                background: rgba(255, 255, 255, .15);
-                border: 1px solid rgba(255, 255, 255, .3);
-                border-radius: 20px;
-                padding: 6px 14px;
-                font-size: 11px;
-            }
-
-            .user-block {
-                margin: 0 30px 30px;
-                border: 1px solid #e5e7eb;
-                border-radius: 10px;
-                overflow: hidden;
-                page-break-inside: avoid;
-            }
-
-            .user-header {
-                background: #f9fafb;
-                padding: 14px 18px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 1px solid #e5e7eb;
-            }
-
-            .left {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }
-
-            .avatar {
-                width: 38px;
-                height: 38px;
-                background: #1f2937;
-                color: white;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 15px;
-                font-weight: 700;
-                flex-shrink: 0;
-            }
-
-            .user-name {
-                font-size: 14px;
-                font-weight: 700;
-            }
-
-            .user-email {
-                font-size: 11px;
-                color: #6b7280;
-                margin-top: 2px;
-            }
-
-            .soldes {
-                display: flex;
-                gap: 10px;
-            }
-
-            .solde-badge {
-                border-radius: 8px;
-                padding: 5px 12px;
-                font-size: 11px;
-                font-weight: 600;
-            }
-
-            .solde-cp {
-                background: #dbeafe;
-                color: #1d4ed8;
-            }
-
-            .solde-rtt {
-                background: #d1fae5;
-                color: #065f46;
-            }
-
-            .solde-maladie {
-                background: #fee2e2;
-                color: #991b1b;
-            }
-
-            table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-
-            th {
-                background: #f3f4f6;
-                padding: 8px 14px;
-                text-align: left;
-                font-size: 10px;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: .05em;
-                color: #6b7280;
-                border-bottom: 1px solid #e5e7eb;
-            }
-
-            td {
-                padding: 9px 14px;
-                border-bottom: 1px solid #f3f4f6;
-                font-size: 11px;
-                vertical-align: middle;
-            }
-
-            tr:last-child td {
-                border-bottom: none;
-            }
-
-            .statut {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 20px;
-                font-size: 10px;
-                font-weight: 600;
-            }
-
-            .statut-valide {
-                background: #d1fae5;
-                color: #065f46;
-                border: 1px solid #10b981;
-            }
-
-            .statut-attente {
-                background: #fef3c7;
-                color: #92400e;
-                border: 1px solid #f59e0b;
-            }
-
-            .statut-refuse {
-                background: #fee2e2;
-                color: #991b1b;
-                border: 1px solid #ef4444;
-            }
-
-            .empty-msg {
-                padding: 20px;
-                text-align: center;
-                color: #9ca3af;
-                font-style: italic;
-                font-size: 11px;
-            }
-
-            .page-footer {
-                margin-top: 40px;
-                padding: 16px 30px;
-                border-top: 1px solid #e5e7eb;
-                display: flex;
-                justify-content: space-between;
-                font-size: 10px;
-                color: #9ca3af;
-            }
-
-            @media print {
-                .no-print {
-                    display: none;
+                .page-header .badge {
+                    background: rgba(255, 255, 255, .15);
+                    border: 1px solid rgba(255, 255, 255, .3);
+                    border-radius: 20px;
+                    padding: 6px 14px;
+                    font-size: 11px;
                 }
 
                 .user-block {
+                    margin: 0 30px 30px;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 10px;
+                    overflow: hidden;
                     page-break-inside: avoid;
                 }
-            }
-        </style>
-    </head>
 
-    <body>
-        <div class="no-print"
-            style="background:#f9fafb;padding:12px 30px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:10px;">
-            <button onclick="window.print()"
-                style="background:#1f2937;color:white;border:none;padding:8px 20px;border-radius:8px;font-size:13px;cursor:pointer;">Imprimer
-                / Enregistrer en PDF</button>
-            <button onclick="window.close()"
-                style="background:white;color:#374151;border:1px solid #e5e7eb;padding:8px 20px;border-radius:8px;font-size:13px;cursor:pointer;">Fermer</button>
-        </div>
+                .user-header {
+                    background: #f9fafb;
+                    padding: 14px 18px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    border-bottom: 1px solid #e5e7eb;
+                }
 
-        <div class="page-header">
-            <div>
-                <h1>DayOff — Rapport d'export</h1>
-                <div class="meta"><?php echo esc_html($company_name); ?> · Généré le <?php echo $date_export; ?></div>
+                .left {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+
+                .avatar {
+                    width: 38px;
+                    height: 38px;
+                    background: #1f2937;
+                    color: white;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 15px;
+                    font-weight: 700;
+                    flex-shrink: 0;
+                }
+
+                .user-name {
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+
+                .user-email {
+                    font-size: 11px;
+                    color: #6b7280;
+                    margin-top: 2px;
+                }
+
+                .soldes {
+                    display: flex;
+                    gap: 10px;
+                }
+
+                .solde-badge {
+                    border-radius: 8px;
+                    padding: 5px 12px;
+                    font-size: 11px;
+                    font-weight: 600;
+                }
+
+                .solde-cp {
+                    background: #dbeafe;
+                    color: #1d4ed8;
+                }
+
+                .solde-rtt {
+                    background: #d1fae5;
+                    color: #065f46;
+                }
+
+                .solde-maladie {
+                    background: #fee2e2;
+                    color: #991b1b;
+                }
+
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+
+                th {
+                    background: #f3f4f6;
+                    padding: 8px 14px;
+                    text-align: left;
+                    font-size: 10px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: .05em;
+                    color: #6b7280;
+                    border-bottom: 1px solid #e5e7eb;
+                }
+
+                td {
+                    padding: 9px 14px;
+                    border-bottom: 1px solid #f3f4f6;
+                    font-size: 11px;
+                    vertical-align: middle;
+                }
+
+                tr:last-child td {
+                    border-bottom: none;
+                }
+
+                .statut {
+                    display: inline-block;
+                    padding: 2px 10px;
+                    border-radius: 20px;
+                    font-size: 10px;
+                    font-weight: 600;
+                }
+
+                .statut-valide {
+                    background: #d1fae5;
+                    color: #065f46;
+                    border: 1px solid #10b981;
+                }
+
+                .statut-attente {
+                    background: #fef3c7;
+                    color: #92400e;
+                    border: 1px solid #f59e0b;
+                }
+
+                .statut-refuse {
+                    background: #fee2e2;
+                    color: #991b1b;
+                    border: 1px solid #ef4444;
+                }
+
+                .empty-msg {
+                    padding: 20px;
+                    text-align: center;
+                    color: #9ca3af;
+                    font-style: italic;
+                    font-size: 11px;
+                }
+
+                .page-footer {
+                    margin-top: 40px;
+                    padding: 16px 30px;
+                    border-top: 1px solid #e5e7eb;
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 10px;
+                    color: #9ca3af;
+                }
+
+                @media print {
+                    .no-print {
+                        display: none;
+                    }
+
+                    .user-block {
+                        page-break-inside: avoid;
+                    }
+                }
+            </style>
+        </head>
+
+        <body>
+            <div class="no-print"
+                style="background:#f9fafb;padding:12px 30px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:10px;">
+                <button onclick="window.print()"
+                    style="background:#1f2937;color:white;border:none;padding:8px 20px;border-radius:8px;font-size:13px;cursor:pointer;">Imprimer
+                    / Enregistrer en PDF</button>
+                <button onclick="window.close()"
+                    style="background:white;color:#374151;border:1px solid #e5e7eb;padding:8px 20px;border-radius:8px;font-size:13px;cursor:pointer;">Fermer</button>
             </div>
-            <div class="badge"><?php echo count($users_data); ?>
-                collaborateur<?php echo count($users_data) > 1 ? 's' : ''; ?></div>
-        </div>
 
-        <?php foreach ($users_data as $ud):
-            $user = $ud['user'];
-            $initial = strtoupper(substr($user->display_name, 0, 1));
-            ?>
-            <div class="user-block">
-                <div class="user-header">
-                    <div class="left">
-                        <div class="avatar"><?php echo $initial; ?></div>
-                        <div>
-                            <div class="user-name"><?php echo esc_html($user->display_name); ?></div>
-                            <div class="user-email"><?php echo esc_html($user->user_email); ?></div>
-                        </div>
-                    </div>
-                    <div class="soldes">
-                        <div class="solde-badge solde-cp"><?php echo $ud['cp']; ?> CP</div>
-                        <div class="solde-badge solde-rtt"><?php echo $ud['rtt']; ?> RTT</div>
-                        <div class="solde-badge solde-maladie"><?php echo $ud['maladie']; ?> Maladie</div>
-                    </div>
+            <div class="page-header">
+                <div>
+                    <h1>DayOff — Rapport d'export</h1>
+                    <div class="meta"><?php echo esc_html($company_name); ?> · Généré le <?php echo $date_export; ?></div>
                 </div>
-                <?php if (!empty($ud['demandes'])): ?>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Type</th>
-                                <th>Début</th>
-                                <th>Fin</th>
-                                <th>Durée</th>
-                                <th>Statut</th>
-                                <th>Commentaire</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($ud['demandes'] as $d):
-                                $debut = date('d/m/Y', strtotime($d->date_debut));
-                                $fin = date('d/m/Y', strtotime($d->date_fin));
-                                $moment = $d->moment_journee ?? 'full';
-                                $duree = $moment !== 'full' ? '0.5 jour' : ((strtotime($d->date_fin) - strtotime($d->date_debut)) / 86400 + 1) . ' j';
-                                if ($d->statut === 'Validé')
-                                    $sc = 'statut-valide';
-                                elseif ($d->statut === 'En attente')
-                                    $sc = 'statut-attente';
-                                else
-                                    $sc = 'statut-refuse';
-                                ?>
-                                <tr>
-                                    <td><strong><?php echo esc_html($d->type_conge); ?></strong></td>
-                                    <td><?php echo $debut; ?></td>
-                                    <td><?php echo $fin; ?></td>
-                                    <td><?php echo $duree; ?></td>
-                                    <td><span class="statut <?php echo $sc; ?>"><?php echo esc_html($d->statut); ?></span></td>
-                                    <td><?php echo !empty($d->commentaire_admin) ? esc_html($d->commentaire_admin) : '—'; ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php else: ?>
-                    <div class="empty-msg">Aucune demande enregistrée</div>
-                <?php endif; ?>
+                <div class="badge"><?php echo count($users_data); ?>
+                    collaborateur<?php echo count($users_data) > 1 ? 's' : ''; ?></div>
             </div>
-        <?php endforeach; ?>
 
-        <div class="page-footer">
-            <span>DayOff — Gestion de Congés Pro</span>
-            <span>Export généré le <?php echo $date_export; ?></span>
-        </div>
-    </body>
+            <?php foreach ($users_data as $ud):
+                $user = $ud['user'];
+                $initial = strtoupper(substr($user->display_name, 0, 1));
+                ?>
+                    <div class="user-block">
+                        <div class="user-header">
+                            <div class="left">
+                                <div class="avatar"><?php echo $initial; ?></div>
+                                <div>
+                                    <div class="user-name"><?php echo esc_html($user->display_name); ?></div>
+                                    <div class="user-email"><?php echo esc_html($user->user_email); ?></div>
+                                </div>
+                            </div>
+                            <div class="soldes">
+                                <div class="solde-badge solde-cp"><?php echo $ud['cp']; ?> CP</div>
+                                <div class="solde-badge solde-rtt"><?php echo $ud['rtt']; ?> RTT</div>
+                                <div class="solde-badge solde-maladie"><?php echo $ud['maladie']; ?> Maladie</div>
+                            </div>
+                        </div>
+                        <?php if (!empty($ud['demandes'])): ?>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Début</th>
+                                            <th>Fin</th>
+                                            <th>Durée</th>
+                                            <th>Statut</th>
+                                            <th>Commentaire</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($ud['demandes'] as $d):
+                                            $debut = date('d/m/Y', strtotime($d->date_debut));
+                                            $fin = date('d/m/Y', strtotime($d->date_fin));
+                                            $moment = $d->moment_journee ?? 'full';
+                                            $duree = $moment !== 'full' ? '0.5 jour' : ((strtotime($d->date_fin) - strtotime($d->date_debut)) / 86400 + 1) . ' j';
+                                            if ($d->statut === 'Validé')
+                                                $sc = 'statut-valide';
+                                            elseif ($d->statut === 'En attente')
+                                                $sc = 'statut-attente';
+                                            else
+                                                $sc = 'statut-refuse';
+                                            ?>
+                                                <tr>
+                                                    <td><strong><?php echo esc_html($d->type_conge); ?></strong></td>
+                                                    <td><?php echo $debut; ?></td>
+                                                    <td><?php echo $fin; ?></td>
+                                                    <td><?php echo $duree; ?></td>
+                                                    <td><span class="statut <?php echo $sc; ?>"><?php echo esc_html($d->statut); ?></span></td>
+                                                    <td><?php echo !empty($d->commentaire_admin) ? esc_html($d->commentaire_admin) : '—'; ?></td>
+                                                </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                        <?php else: ?>
+                                <div class="empty-msg">Aucune demande enregistrée</div>
+                        <?php endif; ?>
+                    </div>
+            <?php endforeach; ?>
 
-    </html>
-    <?php
-    exit;
+            <div class="page-footer">
+                <span>DayOff — Gestion de Congés Pro</span>
+                <span>Export généré le <?php echo $date_export; ?></span>
+            </div>
+        </body>
+
+        </html>
+        <?php
+        exit;
 }
 
 /** 10. RÉCUPÉRATION DE L'HISTORIQUE POUR GESTION USER **/
@@ -1055,3 +1096,61 @@ function gcp_ajax_reset_user_history()
 
     wp_send_json_success('Historique entièrement supprimé.');
 }
+
+add_action('wp_ajax_nopriv_gcp_process_reset_password', 'gcp_process_reset_password');
+add_action('wp_ajax_gcp_process_reset_password', 'gcp_process_reset_password');
+
+function gcp_process_reset_password()
+{
+    $key = sanitize_text_field($_POST['key']);
+    $login = sanitize_text_field($_POST['login']);
+    $pass = $_POST['pass'];
+
+    $user = check_password_reset_key($key, $login);
+
+    if (is_wp_error($user)) {
+        wp_send_json_error('Le lien a expiré ou est invalide.');
+    }
+
+    reset_password($user, $pass);
+    wp_send_json_success('Mot de passe mis à jour !');
+}
+
+add_action('login_form_rp', function () {
+    // Si la requête contient le succès du changement de mot de passe
+    if (isset($_GET['result']) && $_GET['result'] == 'resetpass') {
+        wp_redirect(home_url('/dashboard-conges?password=updated'));
+        exit;
+    }
+});
+
+// Optionnel : Si l'utilisateur clique sur le lien "Connexion" de la page WP
+add_filter('login_redirect', function ($redirect_to, $request, $user) {
+    // Si c'est un utilisateur normal (pas un admin WP), on l'envoie sur le dashboard
+    if (isset($user->roles) && is_array($user->roles)) {
+        if (in_array('subscriber', $user->roles) || in_array('author', $user->roles)) {
+            return home_url('/dashboard-conges');
+        }
+    }
+    return $redirect_to;
+}, 10, 3);
+
+add_action('login_enqueue_scripts', function () {
+    ?>
+        <style type="text/css">
+            #login h1 a {
+                background-image: none !important;
+                display: block;
+                text-indent: 0 !important;
+                width: auto;
+                height: auto;
+                font-weight: 800;
+                font-size: 32px;
+                color: #1e293b !important;
+                text-decoration: none;
+            }
+            #login h1 a::after { content: "DayOff"; }
+            .wp-core-ui .button-primary { background: #1e293b !important; border-color: #1e293b !important; }
+        </style>
+        <?php
+});

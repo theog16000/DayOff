@@ -14,7 +14,7 @@ DayOff est un plugin WordPress léger permettant de gérer les demandes de cong�
 
 1. **Téléchargement** : Clonez ce dépôt dans le dossier `/wp-content/plugins/` de votre installation WordPress.
    ```bash
-   git clone [https://github.com/votre-pseudo/mon-plugin-dayoff.git](https://github.com/votre-pseudo/mon-plugin-dayoff.git)
+   git clone https://github.com/theog16000/DayOff.git
    ```
 2. **OU ACTIVATION** : Allez dans l'administration WordPress > **Extensions** et activez "DayOff".
 3. **Tables SQL** : Le plugin créera automatiquement les tables `wp_conges_demandes` et `wp_conges_modifications`.

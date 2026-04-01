@@ -1212,4 +1212,85 @@ jQuery(document).ready(function ($) {
       },
     });
   });
+
+  $("#form-reset-password").on("submit", function (e) {
+    e.preventDefault();
+    const p1 = $("#pass1").val();
+    const p2 = $("#pass2").val();
+
+    if (p1 !== p2) {
+      showToast("Les mots de passe ne correspondent pas", "danger");
+      return;
+    }
+
+    $.post(
+      dayoff_ajax_url,
+      {
+        action: "gcp_process_reset_password",
+        key: $("#reset_key").val(),
+        login: $("#reset_login").val(),
+        pass: p1,
+      },
+      function (res) {
+        if (res.success) {
+          showToast("C'est bon ! Redirection...", "success");
+          setTimeout(
+            () => (window.location.href = dayoff_home_url + "/connexion"),
+            2000,
+          );
+        } else {
+          showToast(res.data, "danger");
+        }
+      },
+    );
+  });
+
+  // Gestion du formulaire de nouveau mot de passe
+  $(document).on("submit", "#form-reset-password", function (e) {
+    e.preventDefault();
+
+    const p1 = $("#pass1").val();
+    const p2 = $("#pass2").val();
+    const key = $("#reset_key").val();
+    const login = $("#reset_login").val();
+
+    if (p1.length < 6) {
+      showToast("Le mot de passe doit faire au moins 6 caractères", "danger");
+      return;
+    }
+
+    if (p1 !== p2) {
+      showToast("Les mots de passe ne correspondent pas", "danger");
+      return;
+    }
+
+    const btn = $(this).find("button");
+    btn.prop("disabled", true).text("Enregistrement...");
+
+    $.ajax({
+      url: dayoff_ajax_url,
+      type: "POST",
+      data: {
+        action: "gcp_process_reset_password",
+        key: key,
+        login: login,
+        pass: p1,
+      },
+      success: function (res) {
+        if (res.success) {
+          showToast("Mot de passe enregistré ! Connexion...", "success");
+          setTimeout(() => {
+            window.location.href = res.data.redirect;
+          }, 1500);
+        } else {
+          showToast(res.data, "danger");
+          btn.prop("disabled", false).text("Enregistrer et me connecter");
+        }
+      },
+      error: function () {
+        showToast("Erreur de communication", "danger");
+        btn.prop("disabled", false).text("Réessayer");
+      },
+    });
+  });
 });
