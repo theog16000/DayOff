@@ -1163,11 +1163,12 @@ add_action('login_enqueue_scripts', function () {
 });
 
 /** FORCE LA REDIRECTION APRÈS DÉCONNEXION **/
+/** FORCE LA REDIRECTION APRÈS DÉCONNEXION (PROD) **/
 add_action('wp_logout', function () {
-    wp_safe_redirect(home_url('/connexion?logout=success'));
+    // On utilise home_url() pour être sûr d'avoir le bon domaine en prod
+    wp_safe_redirect(home_url('/connexion/?logout=success'));
     exit;
 });
-
 /** ÉVITER LA CONFIRMATION "VOULEZ-VOUS VRAIMENT VOUS DÉCONNECTER ?" **/
 add_action('check_admin_referer', function ($action, $result) {
     if ($action === 'log-out' && !is_admin()) {
