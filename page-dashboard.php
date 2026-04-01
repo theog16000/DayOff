@@ -122,8 +122,10 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
         <?php endif; ?>
         <hr>
         <a href="#" class="menu-item" data-target="parametres"><i data-lucide="settings"></i><span>Paramètres</span></a>
-        <a href="<?php echo wp_logout_url(home_url('/connexion')); ?>" class="menu-item"><i
-                data-lucide="log-out"></i><span>Déconnexion</span></a>
+        <a href="<?php echo wp_logout_url(home_url('/connexion')); ?>" class="menu-item">
+            <i data-lucide="log-out"></i>
+            <span>Déconnexion</span>
+        </a>
     </aside>
 
     <!-- ============================================================
@@ -1076,8 +1078,8 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
             <div class="global d-flex justify-content-between align-items-center mb-4">
                 <h1>Demandes de modifications</h1>
                 <button id="btn-refresh-modifications" class="btn-refresh-small">
-            <i data-lucide="refresh-cw"></i>
-        </button>
+                    <i data-lucide="refresh-cw"></i>
+                </button>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
