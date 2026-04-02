@@ -1175,3 +1175,45 @@ add_action('check_admin_referer', function ($action, $result) {
         return; // On désactive la vérification du referer pour le logout en front
     }
 }, 10, 2);
+
+add_action('restrict_manage_posts', 'gcp_filter_request_type');
+function gcp_filter_request_type()
+{
+    global $typenow;
+    if ($typenow == 'gcp_demande') { // Remplace par le nom de ton CPT
+        $current_type = isset($_GET['request_type_filter']) ? $_GET['request_type_filter'] : '';
+        ?>
+        <select name="request_type_filter">
+            <option value=""><?php _e('Tous les types', 'dayoff'); ?></option>
+            <option value="modification" <?php selected($current_type, 'modification'); ?>>
+
+                <?php _e('Modification', 'dayoff'); ?>
+            </option>
+            <option value="suppression" <?php selected($current_type, 'suppression'); ?>><?php _e('Suppression', 'dayoff'); ?>
+            </option>
+        </select>
+        <?php
+    }
+}
+
+add_filter('pre_get_posts', 'gcp_apply_request_type_filter');
+function gcp_apply_request_type_filter($query)
+{
+    global $pagenow;
+    $post_type = isset($_GET['post_type']) ? $_GET['post_type'] : '';
+
+    if (is_admin() && $pagenow == 'edit.php' && $post_type == 'gcp_demande' && isset($_GET['request_type_filter']) && $_GET['request_type_filter'] != '') {
+
+        $filter_value = sanitize_text_field($_GET['request_type_filter']);
+
+        // Supposons que tu stockes ce type dans une meta_key nommée 'gcp_type_action'
+        $meta_query = (array) $query->get('meta_query');
+        $meta_query[] = [
+            'key' => 'gcp_type_action',
+            'value' => $filter_value,
+            'compare' => '='
+        ];
+
+        $query->set('meta_query', $meta_query);
+    }
+}

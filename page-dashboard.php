@@ -524,6 +524,8 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
                 </table>
             </div>
 
+
+
             <!-- ===== HISTORIQUE DES MODIFICATIONS / ANNULATIONS ===== -->
             <?php if (!empty($mon_historique_modifs)): ?>
                 <div class="mt-5">
