@@ -1,16 +1,210 @@
 /**
  * --- VARIABLES GLOBALES ---
  */
-
 let calendar;
 const boutonDemande = document.querySelector(".menu header .button");
 const modalDemande = document.querySelector(".demande-container");
-const btnFermer = document.querySelector(".close-icon");
-const btnAnnuler = document.querySelector(".btn-cancel");
 const overlay = document.getElementById("overlay");
 
 /**
- * --- SYSTÈME DE TOASTS ---
+ * --- SYSTÈME DE PAGINATION ---
+ */
+const PAGINATION_CONFIG = {
+  mes_demandes: { selector: "#tableBody tr", perPage: 5 },
+  validation_conges: {
+    selector: "#validation_conges .user-row-item",
+    perPage: 5,
+  },
+  modifications: { selector: "#container-modifs-list .modif-row", perPage: 5 },
+  gestion_users: {
+    selector: ".user-list-container .user-row-item[data-name]",
+    perPage: 5,
+  },
+};
+
+const paginationState = {};
+
+function initPagination(sectionKey) {
+  const config = PAGINATION_CONFIG[sectionKey];
+  if (!config) return;
+  paginationState[sectionKey] = { currentPage: 1 };
+  renderPagination(sectionKey);
+}
+
+function getAllItems(sectionKey) {
+  const config = PAGINATION_CONFIG[sectionKey];
+  let items = Array.from(document.querySelectorAll(config.selector));
+  if (sectionKey === "mes_demandes") {
+    items = items.filter((row) => row.cells && row.cells.length >= 3);
+  }
+  // Initialiser data-filtered-out sur les nouveaux items
+  items.forEach((item) => {
+    if (!item.dataset.filteredOut) item.dataset.filteredOut = "false";
+  });
+  return items;
+}
+
+function renderPagination(sectionKey) {
+  const config = PAGINATION_CONFIG[sectionKey];
+  const state = paginationState[sectionKey];
+  if (!state) return;
+
+  const allItems = getAllItems(sectionKey);
+  const visibleItems = allItems.filter(
+    (item) => item.dataset.filteredOut !== "true",
+  );
+
+  const totalItems = visibleItems.length;
+  const totalPages = Math.ceil(totalItems / config.perPage);
+  const currentPage = Math.min(state.currentPage, totalPages || 1);
+  state.currentPage = currentPage;
+
+  const start = (currentPage - 1) * config.perPage;
+  const end = start + config.perPage;
+
+  // Masquer tous les items
+  allItems.forEach((item) =>
+    item.style.setProperty("display", "none", "important"),
+  );
+
+  // Afficher ceux de la page courante parmi les visibles
+  visibleItems.forEach((item, index) => {
+    if (index >= start && index < end) {
+      item.style.removeProperty("display");
+      if (
+        item.classList.contains("user-row-item") ||
+        item.classList.contains("modif-row")
+      ) {
+        item.style.display = "grid";
+      }
+    }
+  });
+
+  renderPaginationControls(
+    sectionKey,
+    currentPage,
+    totalPages,
+    totalItems,
+    config.perPage,
+  );
+}
+
+function renderPaginationControls(
+  sectionKey,
+  currentPage,
+  totalPages,
+  totalItems,
+  perPage,
+) {
+  const containerId = `pagination-${sectionKey}`;
+  let container = document.getElementById(containerId);
+
+  if (!container) {
+    container = document.createElement("div");
+    container.id = containerId;
+    const targets = {
+      mes_demandes: () =>
+        document.querySelector("#mes_demandes .table-responsive"),
+      validation_conges: () =>
+        document.querySelector("#validation_conges .user-list-container"),
+      modifications: () => document.getElementById("container-modifs-list"),
+      gestion_users: () =>
+        document.querySelector("#gestion_users .user-list-container"),
+    };
+    const target = targets[sectionKey]?.();
+    if (target) target.after(container);
+  }
+
+  const total = getAllItems(sectionKey).filter(
+    (i) => i.dataset.filteredOut !== "true",
+  ).length;
+
+  if (totalPages <= 1) {
+    container.innerHTML = `
+            <div style="padding:12px 0;border-top:1px solid #f3f4f6;text-align:center;">
+                <span style="font-size:12px;color:#9ca3af;">
+                    <strong style="color:#374151;">${total}</strong> élément${total > 1 ? "s" : ""}
+                </span>
+            </div>`;
+    return;
+  }
+
+  const start = (currentPage - 1) * perPage + 1;
+  const end = Math.min(currentPage * perPage, totalItems);
+  const delta = 1;
+  let pagesHtml = "";
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (
+      i === 1 ||
+      i === totalPages ||
+      (i >= currentPage - delta && i <= currentPage + delta)
+    ) {
+      const isActive = i === currentPage;
+      pagesHtml += `
+                <button onclick="goToPage('${sectionKey}', ${i})" style="
+                    min-width:36px;height:36px;border-radius:8px;
+                    border:${isActive ? "2px solid #1f2937" : "1px solid #e5e7eb"};
+                    background:${isActive ? "#1f2937" : "#fff"};
+                    color:${isActive ? "#fff" : "#374151"};
+                    font-size:13px;font-weight:${isActive ? "700" : "400"};
+                    cursor:pointer;padding:0 10px;
+                    box-shadow:${isActive ? "0 2px 6px rgba(0,0,0,0.15)" : "none"};
+                ">${i}</button>`;
+    } else if (i === currentPage - delta - 1 || i === currentPage + delta + 1) {
+      pagesHtml += `<span style="color:#9ca3af;font-size:14px;padding:0 2px;line-height:36px;">•••</span>`;
+    }
+  }
+
+  container.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;margin-top:4px;border-top:1px solid #f3f4f6;">
+            <span style="font-size:12px;color:#9ca3af;white-space:nowrap;">
+                <strong style="color:#374151;">${start}–${end}</strong> sur <strong style="color:#374151;">${totalItems}</strong>
+            </span>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <button onclick="goToPage('${sectionKey}', ${currentPage - 1})"
+                    ${currentPage === 1 ? "disabled" : ""}
+                    style="display:flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:8px;
+                        border:1px solid ${currentPage === 1 ? "#f3f4f6" : "#e5e7eb"};
+                        background:${currentPage === 1 ? "#f9fafb" : "#fff"};
+                        color:${currentPage === 1 ? "#d1d5db" : "#374151"};
+                        font-size:13px;cursor:${currentPage === 1 ? "not-allowed" : "pointer"};font-weight:500;">
+                    ← Précédent
+                </button>
+                <div style="display:flex;align-items:center;gap:4px;">${pagesHtml}</div>
+                <button onclick="goToPage('${sectionKey}', ${currentPage + 1})"
+                    ${currentPage === totalPages ? "disabled" : ""}
+                    style="display:flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:8px;
+                        border:1px solid ${currentPage === totalPages ? "#f3f4f6" : "#e5e7eb"};
+                        background:${currentPage === totalPages ? "#f9fafb" : "#1f2937"};
+                        color:${currentPage === totalPages ? "#d1d5db" : "#fff"};
+                        font-size:13px;cursor:${currentPage === totalPages ? "not-allowed" : "pointer"};font-weight:500;">
+                    Suivant →
+                </button>
+            </div>
+        </div>`;
+}
+
+function goToPage(sectionKey, page) {
+  const config = PAGINATION_CONFIG[sectionKey];
+  const state = paginationState[sectionKey];
+  if (!state) return;
+
+  const totalPages = Math.ceil(getAllItems(sectionKey).length / config.perPage);
+  if (page < 1 || page > totalPages) return;
+
+  state.currentPage = page;
+  renderPagination(sectionKey);
+}
+
+function resetPaginationAndFilter(sectionKey, filterFn) {
+  if (paginationState[sectionKey]) paginationState[sectionKey].currentPage = 1;
+  filterFn();
+  renderPagination(sectionKey);
+}
+
+/**
+ * --- TOASTS ---
  */
 function showToast(message, type = "success") {
   let container =
@@ -36,11 +230,11 @@ function showToast(message, type = "success") {
         : "Information";
 
   toast.innerHTML = `
-    <i data-lucide="${icon}" style="color:inherit"></i>
-    <div class="toast-content">
-      <span class="toast-title">${title}</span>
-      <span class="toast-message">${message}</span>
-    </div>`;
+        <i data-lucide="${icon}" style="color:inherit"></i>
+        <div class="toast-content">
+            <span class="toast-title">${title}</span>
+            <span class="toast-message">${message}</span>
+        </div>`;
 
   container.appendChild(toast);
   if (window.lucide) lucide.createIcons();
@@ -88,21 +282,20 @@ function customConfirm(title, text, type = "info") {
 }
 
 /**
- * --- FILTRAGE DU TABLEAU ---
+ * --- FILTRES ---
  */
 function filtrerTableau() {
   const tableBody = document.getElementById("tableBody");
   if (!tableBody) return;
-  const rows = tableBody.querySelectorAll("tr");
 
   const fType =
     document.getElementById("filterType")?.value.toLowerCase() || "";
   const fStatut =
     document.getElementById("filterStatut")?.value.toLowerCase() || "";
-  const fDateDebut = document.getElementById("filterDateDebut")?.value || "";
-  const fDateFin = document.getElementById("filterDateFin")?.value || "";
+  const fDebut = document.getElementById("filterDateDebut")?.value || "";
+  const fFin = document.getElementById("filterDateFin")?.value || "";
 
-  rows.forEach((row) => {
+  tableBody.querySelectorAll("tr").forEach((row) => {
     if (row.cells.length < 3) return;
     const rType = (row.dataset.type || "").toLowerCase();
     const rStatut = (row.dataset.statut || "").toLowerCase();
@@ -111,18 +304,72 @@ function filtrerTableau() {
 
     const matchType = fType === "" || rType.includes(fType);
     const matchStatut = fStatut === "" || rStatut.includes(fStatut);
-
     let matchDate = true;
-    if (fDateDebut && rFin < fDateDebut) matchDate = false;
-    if (fDateFin && rDebut > fDateFin) matchDate = false;
+    if (fDebut && rFin < fDebut) matchDate = false;
+    if (fFin && rDebut > fFin) matchDate = false;
 
-    row.style.display = matchType && matchStatut && matchDate ? "" : "none";
+    if (matchType && matchStatut && matchDate) {
+      row.dataset.filteredOut = "false";
+    } else {
+      row.dataset.filteredOut = "true";
+      row.style.setProperty("display", "none", "important");
+    }
   });
 }
 
+function filtrerValidationsAdmin() {
+  const rows = document.querySelectorAll("#validation_conges .user-row-item");
+  const searchName =
+    document.getElementById("adminFilterName")?.value.toLowerCase() || "";
+  const filterType = document.getElementById("adminFilterType")?.value || "";
+  const filterDate = document.getElementById("adminFilterDate")?.value || "";
+
+  rows.forEach((row) => {
+    const userName =
+      row.querySelector(".user-name-label")?.innerText.toLowerCase() || "";
+    const congeType = row.querySelector(".user-email-sub")?.innerText || "";
+    const matchName = userName.includes(searchName);
+    const matchType = filterType === "" || congeType.includes(filterType);
+    const matchDate = filterDate === "" || row.dataset.debut === filterDate;
+
+    if (matchName && matchType && matchDate) {
+      row.dataset.filteredOut = "false";
+    } else {
+      row.dataset.filteredOut = "true";
+      row.style.setProperty("display", "none", "important");
+    }
+  });
+}
+
+function filterModifications() {
+  const nameSearch =
+    document.getElementById("filterModifName")?.value.toLowerCase() || "";
+  const actionSearch =
+    document.getElementById("filterModifAction")?.value || "";
+
+  document.querySelectorAll(".modif-row").forEach((row) => {
+    const matchName = (row.getAttribute("data-user") || "").includes(
+      nameSearch,
+    );
+    const matchAction =
+      actionSearch === "" || row.getAttribute("data-action") === actionSearch;
+
+    if (matchName && matchAction) {
+      row.dataset.filteredOut = "false";
+    } else {
+      row.dataset.filteredOut = "true";
+      row.style.setProperty("display", "none", "important");
+    }
+  });
+
+  if (paginationState["modifications"]) {
+    paginationState["modifications"].currentPage = 1;
+    renderPagination("modifications");
+  }
+}
+
 /**
- * --- OUVERTURE MODALE TRAÇABILITÉ ---
- * Séparée ici au niveau racine pour éviter tout conflit de scope
+ * --- MODALE TRAÇABILITÉ ---
  */
 function ouvrirTraceModif(btn) {
   let data;
@@ -146,13 +393,10 @@ function ouvrirTraceModif(btn) {
     : "Demande de modification en cours";
 
   document.getElementById("trace-badge-zone").innerHTML = `
-    <span style="font-size:11px;padding:3px 12px;border-radius:20px;font-weight:600;
-          border:1px solid currentColor;
-          ${isSuppr ? "background:#fee2e2;color:#b91c1c;" : "background:#fef3c7;color:#92400e;"}">
-      ${isSuppr ? "Annulation demandée" : "Modification demandée"}
-    </span>
-    <span style="font-size:11px;color:#9ca3af;margin-left:8px;">En attente de validation</span>
-  `;
+        <span style="font-size:11px;padding:3px 12px;border-radius:20px;font-weight:600;border:1px solid currentColor;${isSuppr ? "background:#fee2e2;color:#b91c1c;" : "background:#fef3c7;color:#92400e;"}">
+            ${isSuppr ? "Annulation demandée" : "Modification demandée"}
+        </span>
+        <span style="font-size:11px;color:#9ca3af;margin-left:8px;">En attente de validation</span>`;
 
   document.getElementById("trace-avant").innerText =
     `${data.type_conge} · ${data.date_debut} → ${data.date_fin}`;
@@ -164,18 +408,14 @@ function ouvrirTraceModif(btn) {
   } else {
     document.getElementById("trace-apres-label").innerText =
       "Nouvelles dates souhaitées";
-    const newType = data.nouveau_type || data.type_conge;
-    const newDebut = data.nouvelle_date_debut || "—";
-    const newFin = data.nouvelle_date_fin || "—";
     document.getElementById("trace-apres").innerText =
-      `${newType} · ${newDebut} → ${newFin}`;
+      `${data.nouveau_type || data.type_conge} · ${data.nouvelle_date_debut || "—"} → ${data.nouvelle_date_fin || "—"}`;
     document.getElementById("trace-apres").style.color = "#059669";
   }
 
   document.getElementById("trace-raison").innerText = `"${data.raison}"`;
   document.getElementById("trace-date").innerText = data.created_at;
 
-  // On force le display sans passer par les écouteurs globaux
   modal.style.setProperty("display", "flex", "important");
   if (window.lucide) lucide.createIcons();
 }
@@ -184,54 +424,61 @@ function fermerTraceModif() {
   const modal = document.getElementById("modal-trace-modif");
   if (modal) modal.style.setProperty("display", "none", "important");
 }
+/**
+ * --- FILTRE HISTORIQUE MODIFICATIONS (panel-historique) ---
+ */
+let currentFiltreAction = "tous";
 
+function filtrerHistoriqueModifs(reset) {
+  if (reset === "reset") {
+    const selAction = document.getElementById("filtre-hm-action");
+    const selStatut = document.getElementById("filtre-hm-statut");
+    if (selAction) selAction.value = "";
+    if (selStatut) selStatut.value = "";
+  }
+
+  const action = document.getElementById("filtre-hm-action")?.value || "";
+  const statut = document.getElementById("filtre-hm-statut")?.value || "";
+
+  let visible = 0;
+  document.querySelectorAll(".hm-card").forEach((card) => {
+    const matchAction =
+      action === "" || card.getAttribute("data-action") === action;
+    const matchStatut =
+      statut === "" || card.getAttribute("data-statut") === statut;
+
+    if (matchAction && matchStatut) {
+      card.style.display = "flex";
+      visible++;
+    } else {
+      card.style.display = "none";
+    }
+  });
+
+  const count = document.getElementById("filtre-hm-count");
+  if (count) count.innerText = `${visible} entrée${visible > 1 ? "s" : ""}`;
+}
 /**
  * --- INITIALISATION DOM ---
  */
 document.addEventListener("DOMContentLoaded", function () {
   console.log("DayOff Engine chargé !");
 
-  // 1. REFRESH VALIDATIONS
-  document
-    .getElementById("btn-refresh-validations")
-    ?.addEventListener("click", function () {
-      this.querySelector("i")?.classList.add("rotating");
-      showToast("Actualisation...", "info");
-      setTimeout(() => location.reload(), 800);
-    });
-
-  // 2. MODALE DEMANDE — ouverture / fermeture
+  const menuItems = document.querySelectorAll(".menu-item");
+  const tabContents = document.querySelectorAll(".tab-content");
   const modaleDemande = document.getElementById("modale-demande");
   const overlayDemande = document.getElementById("overlay");
   const btnOuvrir =
     document.getElementById("btn-ouvrir-demande") ||
     document.querySelector(".menu header .button");
+  const paginatedSections = [
+    "mes_demandes",
+    "validation_conges",
+    "modifications",
+    "gestion_users",
+  ];
 
-  btnOuvrir?.addEventListener("click", () => {
-    if (modaleDemande) modaleDemande.style.display = "block";
-    if (overlayDemande) overlayDemande.style.display = "block";
-  });
-
-  document.addEventListener("click", function (e) {
-    // On ne traite pas les clics qui viennent de la modale trace
-    if (e.target.closest("#modal-trace-modif")) return;
-    // On ne traite pas les clics sur les boutons qui ouvrent la modale trace
-    if (e.target.closest(".btn-voir-modif")) return;
-
-    const isCroix = e.target.closest(".close-icon");
-    const isAnnuler = e.target.closest(".btn-cancel");
-    const isOverlay = e.target === overlayDemande;
-
-    if (isCroix || isAnnuler || isOverlay) {
-      if (modaleDemande) modaleDemande.style.display = "none";
-      if (overlayDemande) overlayDemande.style.display = "none";
-    }
-  });
-
-  // 3. ONGLETS
-  const menuItems = document.querySelectorAll(".menu-item");
-  const tabContents = document.querySelectorAll(".tab-content");
-
+  // --- ONGLETS ---
   function switchTab(id) {
     const targetSection = document.getElementById(id);
     if (!targetSection) return;
@@ -252,6 +499,10 @@ document.addEventListener("DOMContentLoaded", function () {
     localStorage.setItem("activeTab", id);
     if (id === "calendrier" && calendar)
       setTimeout(() => calendar.updateSize(), 100);
+
+    if (paginatedSections.includes(id)) {
+      setTimeout(() => initPagination(id), 100);
+    }
   }
 
   menuItems.forEach((link) => {
@@ -268,45 +519,36 @@ document.addEventListener("DOMContentLoaded", function () {
   const tabToOpen =
     tabParam || localStorage.getItem("activeTab") || "dashboard";
   switchTab(tabToOpen);
-
-  if (tabParam) {
+  setTimeout(() => switchMesDemandesTab("demandes"), 150);
+  if (tabParam)
     window.history.replaceState({}, document.title, window.location.pathname);
-  }
 
-  // 4. CONFIGURATION GLOBALE
-  document
-    .getElementById("form-config-global")
-    ?.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      if (
-        await customConfirm(
-          "Appliquer les changements ?",
-          "Les nouvelles règles s'appliqueront immédiatement.",
-        )
-      ) {
-        const formData = new FormData(this);
-        formData.append("action", "save_global_config");
-        const btn = this.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
+  // --- MODALE DEMANDE ---
+  btnOuvrir?.addEventListener("click", () => {
+    if (modaleDemande) modaleDemande.style.display = "block";
+    if (overlayDemande) overlayDemande.style.display = "block";
+  });
 
-        fetch(dayoff_ajax_url, { method: "POST", body: formData })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success) {
-              showToast("Configuration mise à jour !", "success");
-              setTimeout(() => location.reload(), 1000);
-            } else {
-              showToast("Erreur : " + data.data, "danger");
-              if (btn) btn.disabled = false;
-            }
-          });
-      }
-    });
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("#modal-trace-modif")) return;
+    if (e.target.closest(".btn-voir-modif")) return;
 
-  // 5. FILTRES
+    const isCroix = e.target.closest(".close-icon");
+    const isAnnuler = e.target.closest(".btn-cancel");
+    const isOverlay = e.target === overlayDemande;
+
+    if (isCroix || isAnnuler || isOverlay) {
+      if (modaleDemande) modaleDemande.style.display = "none";
+      if (overlayDemande) overlayDemande.style.display = "none";
+    }
+  });
+
+  // --- FILTRES MES DEMANDES ---
   ["filterType", "filterStatut", "filterDateDebut", "filterDateFin"].forEach(
     (id) => {
-      document.getElementById(id)?.addEventListener("input", filtrerTableau);
+      document.getElementById(id)?.addEventListener("input", () => {
+        resetPaginationAndFilter("mes_demandes", filtrerTableau);
+      });
     },
   );
 
@@ -322,11 +564,83 @@ document.addEventListener("DOMContentLoaded", function () {
         const el = document.getElementById(id);
         if (el) el.value = "";
       });
-      filtrerTableau();
+      resetPaginationAndFilter("mes_demandes", filtrerTableau);
       showToast("Filtres réinitialisés", "info");
     });
 
-  // 6. SOUMISSION CONGÉ
+  // --- FILTRES VALIDATIONS ADMIN ---
+  ["adminFilterName", "adminFilterType", "adminFilterDate"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", () => {
+      resetPaginationAndFilter("validation_conges", filtrerValidationsAdmin);
+    });
+  });
+
+  document
+    .getElementById("btn-reset-admin-filters")
+    ?.addEventListener("click", () => {
+      ["adminFilterName", "adminFilterType", "adminFilterDate"].forEach(
+        (id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = "";
+        },
+      );
+      resetPaginationAndFilter("validation_conges", filtrerValidationsAdmin);
+    });
+
+  // --- FILTRES MODIFICATIONS ---
+  document.getElementById("filterModifName")?.addEventListener("input", () => {
+    resetPaginationAndFilter("modifications", filterModifications);
+  });
+  document
+    .getElementById("filterModifAction")
+    ?.addEventListener("change", () => {
+      resetPaginationAndFilter("modifications", filterModifications);
+    });
+  document
+    .getElementById("btn-reset-modif-filters")
+    ?.addEventListener("click", () => {
+      document.getElementById("filterModifName").value = "";
+      document.getElementById("filterModifAction").value = "";
+      resetPaginationAndFilter("modifications", filterModifications);
+    });
+
+  // --- REFRESH ---
+  document
+    .getElementById("btn-refresh-modifications")
+    ?.addEventListener("click", function () {
+      this.querySelector("i")?.classList.add("rotating");
+      showToast("Actualisation...", "info");
+      setTimeout(() => location.reload(), 800);
+    });
+
+  document
+    .getElementById("btn-refresh-validations")
+    ?.addEventListener("click", function () {
+      this.querySelector("i")?.classList.add("rotating");
+      showToast("Actualisation...", "info");
+      setTimeout(() => location.reload(), 800);
+    });
+
+  // --- RECHERCHE UTILISATEURS ---
+  document
+    .getElementById("user-search")
+    ?.addEventListener("input", function () {
+      const val = this.value.toLowerCase();
+      document.querySelectorAll(".user-row-item[data-name]").forEach((row) => {
+        if (row.dataset.name.includes(val)) {
+          row.dataset.filteredOut = "false";
+        } else {
+          row.dataset.filteredOut = "true";
+          row.style.setProperty("display", "none", "important");
+        }
+      });
+      if (paginationState["gestion_users"]) {
+        paginationState["gestion_users"].currentPage = 1;
+        renderPagination("gestion_users");
+      }
+    });
+
+  // --- SOUMISSION CONGÉ ---
   document
     .getElementById("form-conge")
     ?.addEventListener("submit", function (e) {
@@ -358,7 +672,37 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-  // 7. GESTION ADMIN UTILISATEURS
+  // --- CONFIGURATION GLOBALE ---
+  document
+    .getElementById("form-config-global")
+    ?.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      if (
+        await customConfirm(
+          "Appliquer les changements ?",
+          "Les nouvelles règles s'appliqueront immédiatement.",
+        )
+      ) {
+        const formData = new FormData(this);
+        formData.append("action", "save_global_config");
+        const btn = this.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+
+        fetch(dayoff_ajax_url, { method: "POST", body: formData })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              showToast("Configuration mise à jour !", "success");
+              setTimeout(() => location.reload(), 1000);
+            } else {
+              showToast("Erreur : " + data.data, "danger");
+              if (btn) btn.disabled = false;
+            }
+          });
+      }
+    });
+
+  // --- GESTION ADMIN UTILISATEURS ---
   const globalUserForm = document.getElementById("form-admin-user-global");
 
   document.addEventListener("click", function (e) {
@@ -367,7 +711,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const userData = JSON.parse(btnEdit.getAttribute("data-user"));
     const editPanel = document.getElementById("edit-panel");
-
     if (editPanel) {
       editPanel.querySelector(".sidebar-placeholder").style.display = "none";
       editPanel.querySelector(".sidebar-content").style.display = "block";
@@ -385,7 +728,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const btnReset = document.getElementById("btn-reset-history");
     if (btnReset) btnReset.style.display = "block";
-
     fetchUserHistory(userData.id);
   });
 
@@ -396,13 +738,13 @@ document.addEventListener("DOMContentLoaded", function () {
       const userName = document.getElementById("edit-display-name").value;
       if (!userId) return;
 
-      const confirmed = await customConfirm(
-        "Réinitialiser ?",
-        `Voulez-vous supprimer TOUT l'historique de ${userName} ? Cette action est irréversible.`,
-        "danger",
-      );
-
-      if (confirmed) {
+      if (
+        await customConfirm(
+          "Réinitialiser ?",
+          `Voulez-vous supprimer TOUT l'historique de ${userName} ? Cette action est irréversible.`,
+          "danger",
+        )
+      ) {
         const fd = new FormData();
         fd.append("action", "reset_user_history");
         fd.append("target_user_id", userId);
@@ -412,16 +754,14 @@ document.addEventListener("DOMContentLoaded", function () {
           .then((data) => {
             if (data.success) {
               showToast(data.data, "success");
-              const listContainer = document.getElementById("user-leave-list");
-              if (listContainer)
-                listContainer.innerHTML =
+              const lc = document.getElementById("user-leave-list");
+              if (lc)
+                lc.innerHTML =
                   "<li class='text-muted small'>Historique vidé.</li>";
-
-              if (calendar) {
-                calendar.getEvents().forEach((event) => {
-                  if (event.title.startsWith(userName)) event.remove();
+              if (calendar)
+                calendar.getEvents().forEach((ev) => {
+                  if (ev.title.startsWith(userName)) ev.remove();
                 });
-              }
             } else {
               showToast(data.data, "danger");
             }
@@ -432,7 +772,6 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
 
-  // Bouton "Nouveau Collaborateur"
   const btnOpenAdd = document.getElementById("btn-open-add-user");
   const editPanel = document.getElementById("edit-panel");
 
@@ -440,20 +779,16 @@ document.addEventListener("DOMContentLoaded", function () {
     btnOpenAdd.addEventListener("click", () => {
       editPanel.querySelector(".sidebar-placeholder").style.display = "none";
       editPanel.querySelector(".sidebar-content").style.display = "block";
-
       globalUserForm.reset();
       document.getElementById("panel-title").innerText =
         "Nouveau Collaborateur";
       document.getElementById("form-mode").value = "create";
       document.getElementById("edit-user-id").value = "";
-
       const passField = document.getElementById("password-field-container");
       if (passField) passField.style.display = "block";
-
-      const listContainer = document.getElementById("user-leave-list");
-      if (listContainer)
-        listContainer.innerHTML =
-          "<li class='text-muted small'>Nouvel utilisateur</li>";
+      const lc = document.getElementById("user-leave-list");
+      if (lc)
+        lc.innerHTML = "<li class='text-muted small'>Nouvel utilisateur</li>";
     });
   }
 
@@ -489,7 +824,57 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // 8. DURÉE DYNAMIQUE
+  // --- FERMER PANNEAU LATÉRAL ---
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("#btn-close-edit-panel")) {
+      const ep = document.getElementById("edit-panel");
+      if (ep) {
+        ep.querySelector(".sidebar-placeholder").style.display = "flex";
+        ep.querySelector(".sidebar-content").style.display = "none";
+        document.getElementById("form-admin-user-global")?.reset();
+      }
+    }
+  });
+
+  // --- BOUTON MODIF EN ATTENTE ---
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".btn-voir-modif");
+    if (!btn) return;
+    e.stopPropagation();
+    ouvrirTraceModif(btn);
+  });
+
+  // --- BOUTON REFAIRE UNE DEMANDE ---
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".btn-refaire-demande");
+    if (!btn) return;
+    e.stopPropagation();
+
+    const type = btn.getAttribute("data-type");
+    const debut = btn.getAttribute("data-debut");
+    const fin = btn.getAttribute("data-fin");
+
+    const selectType = document.getElementById("type_conge");
+    const inputDebut = document.getElementById("date_debut");
+    const inputFin = document.getElementById("date_fin");
+    const selectMoment = document.getElementById("moment_journee");
+    const ctnDateFin = document.getElementById("container-date-fin");
+
+    if (selectType)
+      Array.from(selectType.options).forEach((opt) => {
+        opt.selected = opt.value === type;
+      });
+    if (inputDebut) inputDebut.value = debut;
+    if (inputFin) inputFin.value = fin;
+    if (selectMoment) selectMoment.value = "full";
+    if (ctnDateFin) ctnDateFin.style.display = "block";
+
+    if (modaleDemande) modaleDemande.style.display = "block";
+    if (overlayDemande) overlayDemande.style.display = "block";
+    if (window.lucide) lucide.createIcons();
+  });
+
+  // --- DURÉE DYNAMIQUE ---
   ["date_debut", "date_fin"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
       const d1 = document.getElementById("date_debut")?.value;
@@ -509,11 +894,10 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // 9. CALENDRIER
+  // --- CALENDRIER ---
   const calendarEl = document.getElementById("calendar");
   if (calendarEl && typeof FullCalendar !== "undefined") {
     let selectedStart = null;
-
     calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: "dayGridMonth",
       locale: "fr",
@@ -522,11 +906,9 @@ document.addEventListener("DOMContentLoaded", function () {
         typeof congesEvents !== "undefined" && Array.isArray(congesEvents)
           ? congesEvents
           : [],
-
       dateClick: function (info) {
         const inD = document.querySelector('input[name="date_debut"]');
         const inF = document.querySelector('input[name="date_fin"]');
-
         if (!selectedStart) {
           selectedStart = info.dateStr;
           if (inD) inD.value = selectedStart;
@@ -536,8 +918,8 @@ document.addEventListener("DOMContentLoaded", function () {
             .forEach((d) => d.classList.remove("fc-day-selected-start"));
           info.dayEl.classList.add("fc-day-selected-start");
         } else {
-          let start = selectedStart;
-          let end = info.dateStr;
+          let start = selectedStart,
+            end = info.dateStr;
           if (end < start) [start, end] = [end, start];
           if (inD) inD.value = start;
           if (inF) inF.value = end;
@@ -545,7 +927,7 @@ document.addEventListener("DOMContentLoaded", function () {
           document
             .querySelectorAll(".fc-day")
             .forEach((d) => d.classList.remove("fc-day-selected-start"));
-          if (modalDemande) modalDemande.style.display = "block";
+          if (modaleDemande) modaleDemande.style.display = "block";
           if (overlay) overlay.style.display = "block";
         }
       },
@@ -553,11 +935,9 @@ document.addEventListener("DOMContentLoaded", function () {
     calendar.render();
   }
 
-  if (window.lucide) lucide.createIcons();
-
-  // 10. GESTION DEMI-JOURNÉES
+  // --- DEMI-JOURNÉES ---
   const selectMoment = document.getElementById("moment_journee");
-  const containerDateFin = document.getElementById("container-date-fin");
+  const ctnDateFin = document.getElementById("container-date-fin");
   const inputDateDebut = document.getElementById("date_debut");
   const inputDateFin = document.getElementById("date_fin");
   const labelDebut = document.getElementById("label-date-debut");
@@ -565,148 +945,29 @@ document.addEventListener("DOMContentLoaded", function () {
   if (selectMoment) {
     selectMoment.addEventListener("change", function () {
       if (this.value !== "full") {
-        if (containerDateFin) containerDateFin.style.display = "none";
+        if (ctnDateFin) ctnDateFin.style.display = "none";
         if (inputDateFin) inputDateFin.removeAttribute("required");
         if (labelDebut) labelDebut.innerText = "Date du congé";
         if (inputDateFin && inputDateDebut)
           inputDateFin.value = inputDateDebut.value;
       } else {
-        if (containerDateFin) containerDateFin.style.display = "block";
+        if (ctnDateFin) ctnDateFin.style.display = "block";
         if (inputDateFin) inputDateFin.setAttribute("required", "required");
         if (labelDebut) labelDebut.innerText = "Date de début";
       }
     });
-
     inputDateDebut?.addEventListener("change", function () {
-      if (selectMoment.value !== "full" && inputDateFin) {
+      if (selectMoment.value !== "full" && inputDateFin)
         inputDateFin.value = this.value;
-      }
     });
   }
 
-  // 11. RECHERCHE UTILISATEURS
-  document
-    .getElementById("user-search")
-    ?.addEventListener("input", function () {
-      const val = this.value.toLowerCase();
-      document.querySelectorAll(".user-row-item[data-name]").forEach((row) => {
-        row.style.display = row.dataset.name.includes(val) ? "" : "none";
-      });
-    });
-
-  // 12. FILTRAGE VALIDATIONS ADMIN
-  function filtrerValidationsAdmin() {
-    const rows = document.querySelectorAll("#validation_conges .user-row-item");
-    const searchName =
-      document.getElementById("adminFilterName")?.value.toLowerCase() || "";
-    const filterType = document.getElementById("adminFilterType")?.value || "";
-    const filterDate = document.getElementById("adminFilterDate")?.value || "";
-
-    rows.forEach((row) => {
-      const userName =
-        row.querySelector(".user-name-label")?.innerText.toLowerCase() || "";
-      const congeType = row.querySelector(".user-email-sub")?.innerText || "";
-      const matchName = userName.includes(searchName);
-      const matchType = filterType === "" || congeType.includes(filterType);
-      const matchDate = filterDate === "" || row.dataset.debut === filterDate;
-
-      row.style.display = matchName && matchType && matchDate ? "grid" : "none";
-    });
-  }
-
-  ["adminFilterName", "adminFilterType", "adminFilterDate"].forEach((id) => {
-    document
-      .getElementById(id)
-      ?.addEventListener("input", filtrerValidationsAdmin);
-  });
-
-  document
-    .getElementById("btn-reset-admin-filters")
-    ?.addEventListener("click", () => {
-      ["adminFilterName", "adminFilterType", "adminFilterDate"].forEach(
-        (id) => {
-          const el = document.getElementById(id);
-          if (el) el.value = "";
-        },
-      );
-      filtrerValidationsAdmin();
-    });
-
-  // 13. ÉCOUTEUR BOUTON FERMER PANNEAU LATÉRAL
-  document.addEventListener("click", function (e) {
-    if (e.target.closest("#btn-close-edit-panel")) {
-      const editPanel = document.getElementById("edit-panel");
-      if (editPanel) {
-        editPanel.querySelector(".sidebar-placeholder").style.display = "flex";
-        editPanel.querySelector(".sidebar-content").style.display = "none";
-        document.getElementById("form-admin-user-global")?.reset();
-      }
-    }
-  });
-
-  // 14. ÉCOUTEUR BOUTON "MODIF EN ATTENTE" — avec stopPropagation
-  document.addEventListener("click", function (e) {
-    const btn = e.target.closest(".btn-voir-modif");
-    if (!btn) return;
-    e.stopPropagation(); // empêche la propagation vers l'écouteur qui ferme les modales
-    ouvrirTraceModif(btn);
-  });
-
-  // 15. ÉCOUTEUR BOUTON "REFAIRE UNE DEMANDE"
-  document.addEventListener("click", function (e) {
-    const btn = e.target.closest(".btn-refaire-demande");
-    if (!btn) return;
-    e.stopPropagation();
-
-    const type = btn.getAttribute("data-type");
-    const debut = btn.getAttribute("data-debut"); // format Y-m-d
-    const fin = btn.getAttribute("data-fin"); // format Y-m-d
-
-    // Pré-remplissage de la modale de dépôt
-    const selectType = document.getElementById("type_conge");
-    const inputDebut = document.getElementById("date_debut");
-    const inputFin = document.getElementById("date_fin");
-    const modaleDemande = document.getElementById("modale-demande");
-    const overlayDemande = document.getElementById("overlay");
-
-    if (selectType) {
-      // On sélectionne la bonne option dans le select
-      Array.from(selectType.options).forEach((opt) => {
-        opt.selected = opt.value === type;
-      });
-    }
-    if (inputDebut) inputDebut.value = debut;
-    if (inputFin) inputFin.value = fin;
-
-    // Afficher la demi-journée si nécessaire (reset à "full" par défaut)
-    const selectMoment = document.getElementById("moment_journee");
-    if (selectMoment) selectMoment.value = "full";
-
-    const containerDateFin = document.getElementById("container-date-fin");
-    if (containerDateFin) containerDateFin.style.display = "block";
-
-    // Ouvrir la modale
-    if (modaleDemande) modaleDemande.style.display = "block";
-    if (overlayDemande) overlayDemande.style.display = "block";
-
-    // Rafraîchir les icônes Lucide dans la modale
-    if (window.lucide) lucide.createIcons();
-  });
-
-  // REFRESH MODIFICATIONS
-  document
-    .getElementById("btn-refresh-modifications")
-    ?.addEventListener("click", function () {
-      this.querySelector("i")?.classList.add("rotating");
-      showToast("Actualisation...", "info");
-      setTimeout(() => location.reload(), 800);
-    });
+  if (window.lucide) lucide.createIcons();
 }); // fin DOMContentLoaded
 
 /**
  * --- FONCTIONS GLOBALES ---
  */
-
 function fetchUserHistory(userId) {
   const listContainer = document.getElementById("user-leave-list");
   const loader = document.getElementById("history-loader");
@@ -731,9 +992,9 @@ function fetchUserHistory(userId) {
           const d1 = new Date(item.date_debut).toLocaleDateString("fr-FR");
           const d2 = new Date(item.date_fin).toLocaleDateString("fr-FR");
           li.innerHTML = `
-            <div><span class="fw-bold">${item.type_conge}</span><br>
-            <small class="text-muted">Du ${d1} au ${d2}</small></div>
-            <span class="badge ${item.statut === "Validé" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning"} border">${item.statut}</span>`;
+                        <div><span class="fw-bold">${item.type_conge}</span><br>
+                        <small class="text-muted">Du ${d1} au ${d2}</small></div>
+                        <span class="badge ${item.statut === "Validé" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning"} border">${item.statut}</span>`;
           listContainer.appendChild(li);
         });
       } else {
@@ -767,9 +1028,7 @@ async function validerDemande(id, decision) {
         if (data.success) {
           showToast(`Demande ${decision}e`, type);
           setTimeout(() => location.reload(), 1500);
-        } else {
-          showToast(data.data || "Erreur", "danger");
-        }
+        } else showToast(data.data || "Erreur", "danger");
       });
   }
 }
@@ -791,9 +1050,7 @@ async function supprimerCollaborateur(id, name) {
         if (data.success) {
           showToast("Supprimé", "success");
           setTimeout(() => location.reload(), 1500);
-        } else {
-          showToast(data.data || "Erreur", "danger");
-        }
+        } else showToast(data.data || "Erreur", "danger");
       });
   }
 }
@@ -809,9 +1066,7 @@ async function annulerMaDemande(id) {
         if (data.success) {
           showToast("Annulé", "success");
           setTimeout(() => location.reload(), 1000);
-        } else {
-          showToast(data.data || "Erreur", "danger");
-        }
+        } else showToast(data.data || "Erreur", "danger");
       });
   }
 }
@@ -831,7 +1086,6 @@ function traiterModif(id, decision) {
   fd.append("action", "traiter_modification_admin");
   fd.append("modif_id", id);
   fd.append("decision", decision);
-
   fetch(dayoff_ajax_url, { method: "POST", body: fd })
     .then((r) => r.json())
     .then((data) => {
@@ -868,25 +1122,18 @@ function afficherFormModif(type) {
   }
 }
 
-function fermerTraceModif() {
-  const modal = document.getElementById("modal-trace-modif");
-  if (modal) modal.style.setProperty("display", "none", "important");
-}
-
 /**
- * --- EXPORT CSV ---
+ * --- EXPORT CSV / PDF ---
  */
 function majZoneSelectionnes() {
   const checked = document.querySelectorAll(".user-export-checkbox:checked");
   const zone = document.getElementById("export-selected-zone");
   const chips = document.getElementById("export-selected-chips");
   const count = document.getElementById("export-selected-count");
-
   if (!zone || !chips || !count) return;
 
   if (checked.length === 0) {
     zone.style.setProperty("display", "none", "important");
-
     chips.innerHTML = "";
     return;
   }
@@ -906,7 +1153,6 @@ function majZoneSelectionnes() {
   });
 }
 
-// Clic sur un chip = décocher
 document.addEventListener("click", function (e) {
   const chip = e.target.closest("#export-selected-chips > div");
   if (!chip) return;
@@ -922,7 +1168,6 @@ document.addEventListener("click", function (e) {
   majZoneSelectionnes();
 });
 
-// Changement d'une checkbox = mise à jour chips
 document.addEventListener("change", function (e) {
   if (!e.target.classList.contains("user-export-checkbox")) return;
   const allCbs = document.querySelectorAll(".user-export-checkbox");
@@ -931,7 +1176,6 @@ document.addEventListener("change", function (e) {
   majZoneSelectionnes();
 });
 
-// Tout sélectionner / désélectionner
 document
   .getElementById("export-select-all")
   ?.addEventListener("change", function () {
@@ -941,7 +1185,6 @@ document
     majZoneSelectionnes();
   });
 
-// Ouverture de la modale
 document.getElementById("btn-export-all")?.addEventListener("click", (e) => {
   e.preventDefault();
   const container = document.getElementById("export-users-list");
@@ -949,18 +1192,15 @@ document.getElementById("btn-export-all")?.addEventListener("click", (e) => {
   if (!container || !modal) return;
 
   container.innerHTML = "";
-
   let usersToSort = [];
   document.querySelectorAll(".user-row-item").forEach((row) => {
     const id = row.getAttribute("data-id");
     const name = row.querySelector(".user-name-label")?.innerText;
     if (id && name) usersToSort.push({ id, name });
   });
-
   usersToSort.sort((a, b) =>
     a.name.localeCompare(b.name, "fr", { sensitivity: "base" }),
   );
-
   usersToSort.forEach((user) => {
     const label = document.createElement("label");
     label.style.cssText =
@@ -969,22 +1209,16 @@ document.getElementById("btn-export-all")?.addEventListener("click", (e) => {
     container.appendChild(label);
   });
 
-  // Reset recherche
   const searchInput = document.getElementById("search-export-user");
   if (searchInput) searchInput.value = "";
-
-  // Reset select-all
   const selectAll = document.getElementById("export-select-all");
   if (selectAll) selectAll.checked = true;
 
-  // ⚠️ Petit délai pour laisser le DOM se mettre à jour avant de lire les checkboxes
   setTimeout(() => majZoneSelectionnes(), 50);
-
   modal.style.display = "flex";
   if (window.lucide) lucide.createIcons();
 });
 
-// Recherche dans la liste
 document
   .getElementById("search-export-user")
   ?.addEventListener("input", function () {
@@ -995,13 +1229,12 @@ document
     });
   });
 
-// Génération du CSV
 document
   .getElementById("btn-confirm-export-csv")
   ?.addEventListener("click", () => {
-    const selected = document.querySelectorAll(".user-export-checkbox:checked");
-    const ids = Array.from(selected).map((cb) => cb.value);
-
+    const ids = Array.from(
+      document.querySelectorAll(".user-export-checkbox:checked"),
+    ).map((cb) => cb.value);
     if (ids.length === 0) {
       showToast("Sélectionnez au moins un collaborateur", "danger");
       return;
@@ -1010,92 +1243,46 @@ document
     const form = document.createElement("form");
     form.method = "POST";
     form.action = dayoff_ajax_url;
-
-    const actionInput = document.createElement("input");
-    actionInput.type = "hidden";
-    actionInput.name = "action";
-    actionInput.value = "export_users_csv";
-    form.appendChild(actionInput);
-
-    const idsInput = document.createElement("input");
-    idsInput.type = "hidden";
-    idsInput.name = "group_ids";
-    idsInput.value = ids.join(",");
-    form.appendChild(idsInput);
-
+    [
+      ["action", "export_users_csv"],
+      ["group_ids", ids.join(",")],
+    ].forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
     document.body.appendChild(form);
     form.submit();
     document.body.removeChild(form);
-
     document.getElementById("modal-export-custom").style.display = "none";
     showToast("Génération du CSV en cours...", "success");
   });
 
-// Export PDF — via URL directe (pas AJAX)
 document
   .getElementById("btn-confirm-export-pdf")
   ?.addEventListener("click", () => {
-    const selected = document.querySelectorAll(".user-export-checkbox:checked");
-    const ids = Array.from(selected).map((cb) => cb.value);
-
+    const ids = Array.from(
+      document.querySelectorAll(".user-export-checkbox:checked"),
+    ).map((cb) => cb.value);
     if (ids.length === 0) {
       showToast("Sélectionnez au moins un collaborateur", "danger");
       return;
     }
 
-    // Construction de l'URL directe — pas besoin de formulaire POST
     const url =
       window.location.origin +
       window.location.pathname +
       "?dayoff_export_pdf=1&ids=" +
       ids.join(",");
-
     window.open(url, "_blank");
-
     document.getElementById("modal-export-custom").style.display = "none";
     showToast("Ouverture du rapport PDF...", "success");
   });
 
 /**
- * FILTRES MODIFICATIONS ADMIN
- */
-function filterModifications() {
-  const nameSearch =
-    document.getElementById("filterModifName")?.value.toLowerCase() || "";
-  const actionSearch =
-    document.getElementById("filterModifAction")?.value || "";
-  const rows = document.querySelectorAll(".modif-row");
-
-  rows.forEach((row) => {
-    const userName = row.getAttribute("data-user") || "";
-    const userAction = row.getAttribute("data-action") || "";
-    const matchName = userName.includes(nameSearch);
-    const matchAction = actionSearch === "" || userAction === actionSearch;
-
-    if (matchName && matchAction) {
-      row.style.setProperty("display", "grid", "important");
-    } else {
-      row.style.setProperty("display", "none", "important");
-    }
-  });
-}
-
-document
-  .getElementById("filterModifName")
-  ?.addEventListener("input", filterModifications);
-document
-  .getElementById("filterModifAction")
-  ?.addEventListener("change", filterModifications);
-document
-  .getElementById("btn-reset-modif-filters")
-  ?.addEventListener("click", () => {
-    document.getElementById("filterModifName").value = "";
-    document.getElementById("filterModifAction").value = "";
-    filterModifications();
-  });
-
-/**
- * SOUMISSION FORMULAIRE MODIFICATION
+ * --- FORMULAIRE MODIFICATION ---
  */
 document
   .getElementById("form-request-change")
@@ -1130,14 +1317,13 @@ document
   });
 
 /**
- * JQUERY — SOUMISSIONS AJAX
+ * --- JQUERY ---
  */
 jQuery(document).ready(function ($) {
   $("#form-conge").on("submit", function (e) {
     e.preventDefault();
     let formData = new FormData(this);
     formData.append("action", "submit_conge");
-
     $.ajax({
       url: dayoff_ajax_url,
       type: "POST",
@@ -1148,9 +1334,7 @@ jQuery(document).ready(function ($) {
         if (response.success) {
           showToast("Demande envoyée !", "success");
           setTimeout(() => location.reload(), 1500);
-        } else {
-          showToast(response.data, "danger");
-        }
+        } else showToast(response.data, "danger");
       },
     });
   });
@@ -1159,7 +1343,6 @@ jQuery(document).ready(function ($) {
     e.preventDefault();
     const newPass = $("#new_password").val();
     const confPass = $("#conf_password").val();
-
     if (newPass !== confPass) {
       showToast("Les mots de passe ne sont pas identiques.", "danger");
       return;
@@ -1176,9 +1359,7 @@ jQuery(document).ready(function ($) {
         if (response.success) {
           showToast(response.data, "success");
           $("#new_password, #conf_password").val("");
-        } else {
-          showToast(response.data, "danger");
-        }
+        } else showToast(response.data, "danger");
       },
     );
   });
@@ -1191,7 +1372,6 @@ jQuery(document).ready(function ($) {
 
     let formData = new FormData(this);
     formData.append("action", "save_global_config");
-
     $.ajax({
       url: dayoff_ajax_url,
       type: "POST",
@@ -1199,11 +1379,8 @@ jQuery(document).ready(function ($) {
       contentType: false,
       processData: false,
       success: function (response) {
-        if (response.success) {
-          showToast(response.data, "success");
-        } else {
-          showToast("Erreur : " + response.data, "danger");
-        }
+        if (response.success) showToast(response.data, "success");
+        else showToast("Erreur : " + response.data, "danger");
         btn.prop("disabled", false).text(originalText);
       },
       error: function () {
@@ -1212,85 +1389,43 @@ jQuery(document).ready(function ($) {
       },
     });
   });
-
-  $("#form-reset-password").on("submit", function (e) {
-    e.preventDefault();
-    const p1 = $("#pass1").val();
-    const p2 = $("#pass2").val();
-
-    if (p1 !== p2) {
-      showToast("Les mots de passe ne correspondent pas", "danger");
-      return;
-    }
-
-    $.post(
-      dayoff_ajax_url,
-      {
-        action: "gcp_process_reset_password",
-        key: $("#reset_key").val(),
-        login: $("#reset_login").val(),
-        pass: p1,
-      },
-      function (res) {
-        if (res.success) {
-          showToast("C'est bon ! Redirection...", "success");
-          setTimeout(
-            () => (window.location.href = dayoff_home_url + "/connexion"),
-            2000,
-          );
-        } else {
-          showToast(res.data, "danger");
-        }
-      },
-    );
-  });
-
-  // Gestion du formulaire de nouveau mot de passe
-  $(document).on("submit", "#form-reset-password", function (e) {
-    e.preventDefault();
-
-    const p1 = $("#pass1").val();
-    const p2 = $("#pass2").val();
-    const key = $("#reset_key").val();
-    const login = $("#reset_login").val();
-
-    if (p1.length < 6) {
-      showToast("Le mot de passe doit faire au moins 6 caractères", "danger");
-      return;
-    }
-
-    if (p1 !== p2) {
-      showToast("Les mots de passe ne correspondent pas", "danger");
-      return;
-    }
-
-    const btn = $(this).find("button");
-    btn.prop("disabled", true).text("Enregistrement...");
-
-    $.ajax({
-      url: dayoff_ajax_url,
-      type: "POST",
-      data: {
-        action: "gcp_process_reset_password",
-        key: key,
-        login: login,
-        pass: p1,
-      },
-      success: function (res) {
-        if (res.success) {
-          showToast("Mot de passe enregistré ! Connexion...", "success");
-          setTimeout(() => {
-            window.location.href = res.data.redirect;
-          }, 1500);
-        } else {
-          showToast(res.data, "danger");
-          btn.prop("disabled", false).text("Enregistrer et me connecter");
-        }
-      },
-      error: function () {
-        showToast("Erreur de communication", "danger");
-        btn.prop("disabled", false).text("Réessayer");
-      },
-    });
-  });
 });
+/**
+ * --- TABS MES DEMANDES ---
+ */
+function switchMesDemandesTab(tab) {
+  const panelDemandes = document.getElementById("panel-demandes");
+  const panelHistorique = document.getElementById("panel-historique");
+  const btnDemandes = document.getElementById("tab-btn-demandes");
+  const btnHistorique = document.getElementById("tab-btn-historique");
+
+  if (!panelDemandes || !panelHistorique || !btnDemandes || !btnHistorique)
+    return;
+
+  // Style de base commun aux deux boutons
+  const baseStyle =
+    "padding:10px 20px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;transition:all .2s;margin-bottom:-2px;";
+
+  if (tab === "demandes") {
+    panelDemandes.style.display = "block";
+    panelHistorique.style.display = "none";
+    btnDemandes.style.cssText =
+      baseStyle + "color:#1f2937;border-bottom:2px solid #1f2937;";
+    btnHistorique.style.cssText =
+      baseStyle + "color:#6b7280;border-bottom:2px solid transparent;";
+
+    if (paginationState["mes_demandes"]) {
+      paginationState["mes_demandes"].currentPage = 1;
+      renderPagination("mes_demandes");
+    }
+  } else {
+    panelDemandes.style.display = "none";
+    panelHistorique.style.display = "block";
+    btnDemandes.style.cssText =
+      baseStyle + "color:#6b7280;border-bottom:2px solid transparent;";
+    btnHistorique.style.cssText =
+      baseStyle + "color:#1f2937;border-bottom:2px solid #1f2937;";
+  }
+
+  if (window.lucide) lucide.createIcons();
+}

@@ -1,0 +1,11 @@
+Bonjour,
+
+Ceci est un fichier texte du plugin DayOff.
+
+Ce plugin WordPress permet la gestion des demandes de congés et d'absences.
+Il offre un tableau de bord intuitif pour les employés et les responsables,
+avec un système de validation des demandes.
+
+Développé avec soin pour simplifier la gestion des ressources humaines.
+
+-- Plugin DayOff --

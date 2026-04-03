@@ -83,8 +83,22 @@ $mes_demandes = $wpdb->get_results($wpdb->prepare(
     $user_id
 ));
 
+$mon_historique_modifs = $wpdb->get_results($wpdb->prepare(
+    "SELECT m.*, d.type_conge, d.date_debut, d.date_fin 
+                         FROM {$wpdb->prefix}conges_modifications m
+                         JOIN {$wpdb->prefix}conges_demandes d ON m.demande_id = d.id
+                         WHERE m.user_id = %d
+                         ORDER BY m.created_at DESC",
+    $user_id
+));
+
 $avatar_url = get_avatar_url($user_id);
 $is_admin = in_array('administrator', (array) $current_user->roles);
+
+$total_pending = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}conges_demandes WHERE statut = 'En attente'");
+$count_pending = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}conges_modifications WHERE statut = 'En attente'");
+
+
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -112,10 +126,39 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
                 Demandes</span></a>
         <?php if ($is_admin): ?>
             <hr>
-            <a href="#" class="menu-item" data-target="validation_conges"><i data-lucide="badge-check"></i><span>Gestion de
-                    congés</span></a>
-            <a href="#" class="menu-item" data-target="modifications"><i
-                    data-lucide="refresh-ccw"></i><span>Modifications</span></a>
+            <a href="#" class="menu-item" data-target="validation_conges">
+                <i data-lucide="badge-check"></i>
+                <span>Gestion de congés</span>
+                <?php if ($total_pending > 0): ?>
+                    <span style="
+            background:#ef4444;color:white;
+            border-radius:50%;min-width:18px;height:18px;
+            font-size:10px;font-weight:700;
+            display:inline-flex;align-items:center;justify-content:center;
+            margin-left:auto;padding:0 4px;
+            line-height:1;
+        ">
+                        <?php echo $total_pending > 99 ? '99+' : $total_pending; ?>
+                    </span>
+                <?php endif; ?>
+            </a>
+
+            <a href="#" class="menu-item" data-target="modifications">
+                <i data-lucide="refresh-ccw"></i>
+                <span>Modifications</span>
+                <?php if ($count_pending > 0): ?>
+                    <span style="
+            background:#ef4444;color:white;
+            border-radius:50%;min-width:18px;height:18px;
+            font-size:10px;font-weight:700;
+            display:inline-flex;align-items:center;justify-content:center;
+            margin-left:auto;padding:0 4px;
+            line-height:1;
+        ">
+                        <?php echo $count_pending > 99 ? '99+' : $count_pending; ?>
+                    </span>
+                <?php endif; ?>
+            </a>
             <a href="#" class="menu-item" data-target="gestion_users"><i data-lucide="shield-user"></i><span>Gestion
                     Utilisateurs</span></a>
             <a href="#" class="menu-item" data-target="config"><i data-lucide="bolt"></i><span>Configuration</span></a>
@@ -297,347 +340,391 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
                 </div>
             </div>
 
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width:15%;">Type</th>
-                            <th style="width:30%;">Période</th>
-                            <th style="width:20%;">Statut</th>
-                            <th style="width:25%;">Commentaire</th>
-                            <th style="width:10%;">Actions</th>
-                        </tr>
-                        <tr class="bg-white">
-                            <th>
-                                <select id="filterType" class="form-select form-select-sm">
-                                    <option value="">Tous</option>
-                                    <option value="CP">CP</option>
-                                    <option value="RTT">RTT</option>
-                                    <option value="Maladie">Maladie</option>
-                                </select>
-                            </th>
-                            <th style="min-width:220px;">
-                                <div class="d-flex gap-1 align-items-center">
-                                    <input type="date" id="filterDateDebut" class="form-control form-control-sm">
-                                    <span class="small text-muted">au</span>
-                                    <input type="date" id="filterDateFin" class="form-control form-control-sm">
-                                </div>
-                            </th>
-                            <th>
-                                <select id="filterStatut" class="form-select form-select-sm">
-                                    <option value="">Tous</option>
-                                    <option value="Validé">Validé</option>
-                                    <option value="En attente">En attente</option>
-                                    <option value="Refusé">Refusé</option>
-                                </select>
-                            </th>
-                            <th></th>
-                            <th class="text-end">
-                                <button id="btn-reset-filters" class="btn-submit"
-                                    style="padding:5px 10px;font-size:12px;background:var(--texte-noir);width:auto;">
-                                    <i data-lucide="rotate-ccw" style="width:14px;margin-right:5px;"></i> Reset
-                                </button>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <?php
-                        // --- Pré-chargement des demandes de modification en attente ---
-                        $mes_modifs_en_attente = $wpdb->get_results($wpdb->prepare(
-                            "SELECT * FROM {$wpdb->prefix}conges_modifications 
-                     WHERE user_id = %d AND statut = 'En attente'
-                     ORDER BY created_at DESC",
-                            $user_id
-                        ));
-                        $modifs_index = [];
-                        foreach ($mes_modifs_en_attente as $mod) {
-                            $modifs_index[$mod->demande_id] = $mod;
-                        }
-
-                        // Modifs déjà traitées
-                        $mes_modifs_traitees = $wpdb->get_results($wpdb->prepare(
-                            "SELECT * FROM {$wpdb->prefix}conges_modifications 
-                     WHERE user_id = %d AND statut != 'En attente'
-                     ORDER BY created_at DESC",
-                            $user_id
-                        ));
-                        $modifs_traitees_index = [];
-                        foreach ($mes_modifs_traitees as $mod) {
-                            if (!isset($modifs_traitees_index[$mod->demande_id])) {
-                                $modifs_traitees_index[$mod->demande_id] = $mod;
-                            }
-                        }
-
-                        // Historique complet
-                        // Historique complet des demandes de modification/annulation de l'utilisateur
-                        $mon_historique_modifs = $wpdb->get_results($wpdb->prepare(
-                            "SELECT m.*, d.type_conge, d.date_debut, d.date_fin 
-     FROM {$wpdb->prefix}conges_modifications m
-     JOIN {$wpdb->prefix}conges_demandes d ON m.demande_id = d.id
-     WHERE m.user_id = %d
-     ORDER BY m.created_at DESC",
-                            $user_id
-                        ));
-
-                        if (!empty($mes_demandes)):
-                            foreach ($mes_demandes as $demande):
-                                $d_deb = date('d/m/Y', strtotime($demande->date_debut));
-                                $d_fin = date('d/m/Y', strtotime($demande->date_fin));
-                                $statut_colors = [
-                                    'Validé' => ['bg' => '#d1fae5', 'color' => '#065f46', 'border' => '#10b981'],
-                                    'En attente' => ['bg' => '#fef3c7', 'color' => '#92400e', 'border' => '#f59e0b'],
-                                    'Refusé' => ['bg' => '#fee2e2', 'color' => '#991b1b', 'border' => '#ef4444'],
-                                ];
-                                $s = $statut_colors[$demande->statut] ?? ['bg' => '#f3f4f6', 'color' => '#374151', 'border' => '#9ca3af'];
-                                $modif_en_cours = $modifs_index[$demande->id] ?? null;
-                                ?>
-                                <tr data-type="<?php echo esc_attr($demande->type_conge); ?>"
-                                    data-statut="<?php echo esc_attr($demande->statut); ?>"
-                                    data-debut="<?php echo esc_attr($demande->date_debut); ?>"
-                                    data-fin="<?php echo esc_attr($demande->date_fin); ?>">
-
-                                    <!-- TYPE -->
-                                    <td>
-                                        <span style="font-weight:600;"><?php echo esc_html($demande->type_conge); ?></span>
-                                    </td>
-
-                                    <!-- PÉRIODE -->
-                                    <td>
-                                        <?php $moment = $demande->moment_journee ?? 'full'; ?>
-                                        <div style="font-weight:500;">
-                                            <?php echo $moment !== 'full' ? "Le $d_deb" : "Du $d_deb au $d_fin"; ?>
-                                        </div>
-                                        <div style="margin-top:5px;">
-                                            <?php if ($moment === 'matin'): ?>
-                                                <span
-                                                    style="background:#e3f2fd;color:#1976d2;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid #1976d2;">MATIN</span>
-                                            <?php elseif ($moment === 'apres-midi'): ?>
-                                                <span
-                                                    style="background:#fff3e0;color:#ef6c00;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid #ef6c00;">APRÈS-MIDI</span>
-                                            <?php else: ?>
-                                                <span
-                                                    style="background:#f5f5f5;color:#616161;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid #bdbdbd;">
-                                                    <?php echo gcp_get_duree_formattee($demande); ?>
-                                                </span>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
-
-                                    <!-- STATUT -->
-                                    <td>
-                                        <div class="d-flex flex-column gap-1">
-                                            <span
-                                                style="background:<?php echo $s['bg']; ?>;color:<?php echo $s['color']; ?>;border:1px solid <?php echo $s['border']; ?>;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block;width:fit-content;">
-                                                <?php echo esc_html($demande->statut); ?>
-                                            </span>
-                                            <?php if ($modif_en_cours): ?>
-                                                <span
-                                                    style="font-size:10px;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;padding:2px 8px;display:inline-block;width:fit-content;">
-                                                    Modif/Annulation en attente
-                                                </span>
-                                            <?php elseif (isset($modifs_traitees_index[$demande->id])): ?>
-                                                <?php
-                                                $mt = $modifs_traitees_index[$demande->id];
-                                                $label_action = $mt->type_action === 'Suppression' ? 'Suppression' : 'Modification';
-                                                ?>
-                                                <?php if ($mt->statut === 'Validé'): ?>
-                                                    <span
-                                                        style="font-size:10px;color:#065f46;background:#d1fae5;border:1px solid #10b981;border-radius:12px;padding:2px 8px;display:inline-block;width:fit-content;">
-                                                        ✓ <?php echo $label_action; ?> acceptée
-                                                    </span>
-                                                <?php elseif ($mt->statut === 'Refusé'): ?>
-                                                    <span
-                                                        style="font-size:10px;color:#991b1b;background:#fee2e2;border:1px solid #ef4444;border-radius:12px;padding:2px 8px;display:inline-block;width:fit-content;">
-                                                        ✕ <?php echo $label_action; ?> refusée
-                                                    </span>
-                                                <?php endif; ?>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
-
-                                    <!-- COMMENTAIRE ADMIN -->
-                                    <td>
-                                        <span style="font-size:13px;color:#6b7280;">
-                                            <?php echo !empty($demande->commentaire_admin) ? esc_html($demande->commentaire_admin) : '<em>—</em>'; ?>
-                                        </span>
-                                    </td>
-
-                                    <!-- ACTIONS -->
-                                    <td>
-                                        <?php if ($modif_en_cours): ?>
-                                            <button class="btn-action btn-voir-modif"
-                                                style="font-size:10px;padding:4px 8px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;white-space:nowrap;"
-                                                data-modif='<?php echo esc_attr(json_encode([
-                                                    "type_action" => $modif_en_cours->type_action,
-                                                    "created_at" => date("d/m/Y à H:i", strtotime($modif_en_cours->created_at)),
-                                                    "raison" => $modif_en_cours->raison,
-                                                    "type_conge" => $demande->type_conge,
-                                                    "date_debut" => $d_deb,
-                                                    "date_fin" => $d_fin,
-                                                    "nouveau_type" => $modif_en_cours->nouveau_type ?? "",
-                                                    "nouvelle_date_debut" => !empty($modif_en_cours->nouvelle_date_debut) ? date("d/m/Y", strtotime($modif_en_cours->nouvelle_date_debut)) : "",
-                                                    "nouvelle_date_fin" => !empty($modif_en_cours->nouvelle_date_fin) ? date("d/m/Y", strtotime($modif_en_cours->nouvelle_date_fin)) : "",
-                                                ])); ?>'>
-                                                <i data-lucide="clock"
-                                                    style="width:12px;margin-right:3px;vertical-align:middle;"></i>
-                                                Modif en attente...
-                                            </button>
-
-                                        <?php elseif ($demande->statut === 'En attente'): ?>
-                                            <button class="action-icon-btn delete" title="Supprimer"
-                                                onclick="annulerMaDemande(<?php echo $demande->id; ?>)">
-                                                <i data-lucide="trash-2"></i>
-                                            </button>
-
-                                        <?php elseif ($demande->statut === 'Validé'): ?>
-                                            <button class="btn-action" style="font-size:10px;padding:4px 8px;"
-                                                onclick="demanderModification(<?php echo $demande->id; ?>)">
-                                                <i data-lucide="refresh-cw" style="width:12px;margin-right:4px;"></i> Modif/Annuler
-                                            </button>
-
-                                        <?php elseif ($demande->statut === 'Refusé'): ?>
-                                            <button class="btn-action btn-refaire-demande"
-                                                style="font-size:10px;padding:4px 8px;background:#eff6ff;color:#1d4ed8;border:1px solid #3b82f6;white-space:nowrap;"
-                                                data-type="<?php echo esc_attr($demande->type_conge); ?>"
-                                                data-debut="<?php echo esc_attr($demande->date_debut); ?>"
-                                                data-fin="<?php echo esc_attr($demande->date_fin); ?>">
-                                                <i data-lucide="rotate-ccw"
-                                                    style="width:12px;margin-right:3px;vertical-align:middle;"></i>
-                                                Refaire
-                                            </button>
-
-                                        <?php else: ?>
-                                            <span style="color:#d1d5db;">—</span>
-                                        <?php endif; ?>
-                                    </td>
-
-                                </tr>
-                            <?php endforeach;
-                        else: ?>
-                            <tr>
-                                <td colspan="5" class="text-center" style="padding:40px;color:#9ca3af;">
-                                    Aucune demande enregistrée pour le moment ...
-                                </td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+            <!-- ===== TABS NAVIGATION ===== -->
+            <div style="display:flex;gap:8px;margin-bottom:24px;border-bottom:2px solid #f3f4f6;padding-bottom:0;">
+                <button id="tab-btn-demandes" onclick="switchMesDemandesTab('demandes')" style="
+                padding:10px 20px;border:none;background:none;cursor:pointer;
+                font-size:14px;font-weight:600;color:#6b7280;
+                border-bottom:2px solid transparent;margin-bottom:-2px;
+                transition:all .2s;
+            ">
+                    <i data-lucide="list" style="width:15px;margin-right:6px;vertical-align:middle;"></i>
+                    Mes demandes
+                    <span
+                        style="background:#f3f4f6;color:#374151;border-radius:20px;padding:2px 8px;font-size:11px;margin-left:6px;">
+                        <?php echo count($mes_demandes); ?>
+                    </span>
+                </button>
+                <button id="tab-btn-historique" onclick="switchMesDemandesTab('historique')" style="
+                padding:10px 20px;border:none;background:none;cursor:pointer;
+                font-size:14px;font-weight:600;color:#6b7280;
+                border-bottom:2px solid transparent;margin-bottom:-2px;
+                transition:all .2s;
+            ">
+                    <i data-lucide="history" style="width:15px;margin-right:6px;vertical-align:middle;"></i>
+                    Historique des modifications
+                    <span
+                        style="background:#f3f4f6;color:#374151;border-radius:20px;padding:2px 8px;font-size:11px;margin-left:6px;">
+                        <?php echo count($mon_historique_modifs); ?>
+                    </span>
+                </button>
             </div>
 
+            <!-- ===== PANEL 1 : MES DEMANDES ===== -->
+            <div id="panel-demandes">
 
-
-            <!-- ===== HISTORIQUE DES MODIFICATIONS / ANNULATIONS ===== -->
-            <?php if (!empty($mon_historique_modifs)): ?>
-                <div class="mt-5">
-
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                        <i data-lucide="history" style="width:18px;color:#6b7280;"></i>
-                        <h2 class="fw-bold mb-0" style="font-size:16px;">Historique de mes demandes de modification</h2>
-                        <span
-                            style="font-size:11px;color:#9ca3af;background:#f3f4f6;border-radius:12px;padding:2px 10px;border:1px solid #e5e7eb;">
-                            <?php echo count($mon_historique_modifs); ?>
-                            entrée<?php echo count($mon_historique_modifs) > 1 ? 's' : ''; ?>
-                        </span>
-                    </div>
-
-                    <!-- Scroll horizontal -->
-                    <div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:12px;scrollbar-width:thin;">
-
-                        <?php foreach ($mon_historique_modifs as $hm):
-                            $is_suppr = ($hm->type_action === 'Suppression');
-                            $is_valide = ($hm->statut === 'Validé');
-                            $is_attente = ($hm->statut === 'En attente');
-
-                            // Couleurs badge statut
-                            if ($is_attente) {
-                                $sbg = '#fef3c7';
-                                $scol = '#92400e';
-                                $sborder = '#f59e0b';
-                            } elseif ($is_valide) {
-                                $sbg = '#d1fae5';
-                                $scol = '#065f46';
-                                $sborder = '#10b981';
-                            } else {
-                                $sbg = '#fee2e2';
-                                $scol = '#991b1b';
-                                $sborder = '#ef4444';
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:15%;">Type</th>
+                                <th style="width:30%;">Période</th>
+                                <th style="width:20%;">Statut</th>
+                                <th style="width:25%;">Commentaire</th>
+                                <th style="width:10%;">Actions</th>
+                            </tr>
+                            <tr class="bg-white">
+                                <th>
+                                    <select id="filterType" class="form-select form-select-sm">
+                                        <option value="">Tous</option>
+                                        <option value="CP">CP</option>
+                                        <option value="RTT">RTT</option>
+                                        <option value="Maladie">Maladie</option>
+                                    </select>
+                                </th>
+                                <th style="min-width:220px;">
+                                    <div class="d-flex gap-1 align-items-center">
+                                        <input type="date" id="filterDateDebut" class="form-control form-control-sm">
+                                        <span class="small text-muted">au</span>
+                                        <input type="date" id="filterDateFin" class="form-control form-control-sm">
+                                    </div>
+                                </th>
+                                <th>
+                                    <select id="filterStatut" class="form-select form-select-sm">
+                                        <option value="">Tous</option>
+                                        <option value="Validé">Validé</option>
+                                        <option value="En attente">En attente</option>
+                                        <option value="Refusé">Refusé</option>
+                                    </select>
+                                </th>
+                                <th></th>
+                                <th class="text-end">
+                                    <button id="btn-reset-filters" class="btn-submit"
+                                        style="padding:5px 10px;font-size:12px;background:var(--texte-noir);width:auto;">
+                                        <i data-lucide="rotate-ccw" style="width:14px;margin-right:5px;"></i> Reset
+                                    </button>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <?php
+                            $mes_modifs_en_attente = $wpdb->get_results($wpdb->prepare(
+                                "SELECT * FROM {$wpdb->prefix}conges_modifications 
+                         WHERE user_id = %d AND statut = 'En attente'
+                         ORDER BY created_at DESC",
+                                $user_id
+                            ));
+                            $modifs_index = [];
+                            foreach ($mes_modifs_en_attente as $mod) {
+                                $modifs_index[$mod->demande_id] = $mod;
                             }
 
-                            // Couleur avatar action
-                            $avatar_bg = $is_suppr ? '#fee2e2' : '#fef3c7';
-                            $avatar_col = $is_suppr ? '#b91c1c' : '#92400e';
-                            ?>
-                            <div
-                                style="min-width:260px;max-width:280px;flex-shrink:0;background:#fff;border:0.5px solid #e5e7eb;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+                            $mes_modifs_traitees = $wpdb->get_results($wpdb->prepare(
+                                "SELECT * FROM {$wpdb->prefix}conges_modifications 
+                         WHERE user_id = %d AND statut != 'En attente'
+                         ORDER BY created_at DESC",
+                                $user_id
+                            ));
+                            $modifs_traitees_index = [];
+                            foreach ($mes_modifs_traitees as $mod) {
+                                if (!isset($modifs_traitees_index[$mod->demande_id])) {
+                                    $modifs_traitees_index[$mod->demande_id] = $mod;
+                                }
+                            }
 
-                                <!-- En-tête : action + statut -->
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <span
-                                        style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;border:1px solid currentColor;
-                        <?php echo $is_suppr ? 'background:#fee2e2;color:#b91c1c;' : 'background:#fef3c7;color:#92400e;'; ?>">
-                                        <?php echo $is_suppr ? 'Suppression' : 'Modification'; ?>
-                                    </span>
-                                    <span
-                                        style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:<?php echo $sbg; ?>;color:<?php echo $scol; ?>;border:1px solid <?php echo $sborder; ?>;">
-                                        <?php echo esc_html($hm->statut); ?>
-                                    </span>
-                                </div>
 
-                                <!-- Congé concerné -->
-                                <div style="font-size:12px;color:#374151;">
-                                    <div
-                                        style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;margin-bottom:3px;">
-                                        Congé concerné</div>
-                                    <strong><?php echo esc_html($hm->type_conge); ?></strong>
-                                    <span style="color:#6b7280;">
-                                        · <?php echo date('d/m/Y', strtotime($hm->date_debut)); ?> →
-                                        <?php echo date('d/m/Y', strtotime($hm->date_fin)); ?>
-                                    </span>
-                                </div>
 
-                                <!-- Bloc avant / après -->
-                                <div style="background:#f9fafb;border-radius:8px;padding:8px 10px;">
-                                    <div
-                                        style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;margin-bottom:6px;">
-                                        Changement demandé</div>
-                                    <div style="font-size:11px;color:#dc2626;text-decoration:line-through;margin-bottom:3px;">
-                                        <?php echo esc_html($hm->type_conge); ?> ·
-                                        <?php echo date('d/m', strtotime($hm->date_debut)); ?> →
-                                        <?php echo date('d/m', strtotime($hm->date_fin)); ?>
-                                    </div>
-                                    <div style="font-size:11px;color:#059669;">
-                                        <?php if ($is_suppr): ?>
-                                            Suppression du congé
-                                        <?php else: ?>
-                                            <?php echo !empty($hm->nouveau_type) ? esc_html($hm->nouveau_type) : esc_html($hm->type_conge); ?>
-                                            ·
-                                            <?php echo !empty($hm->nouvelle_date_debut) ? date('d/m', strtotime($hm->nouvelle_date_debut)) : '—'; ?>
-                                            →
-                                            <?php echo !empty($hm->nouvelle_date_fin) ? date('d/m', strtotime($hm->nouvelle_date_fin)) : '—'; ?>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
+                            if (!empty($mes_demandes)):
+                                foreach ($mes_demandes as $demande):
+                                    $d_deb = date('d/m/Y', strtotime($demande->date_debut));
+                                    $d_fin = date('d/m/Y', strtotime($demande->date_fin));
+                                    $statut_colors = [
+                                        'Validé' => ['bg' => '#d1fae5', 'color' => '#065f46', 'border' => '#10b981'],
+                                        'En attente' => ['bg' => '#fef3c7', 'color' => '#92400e', 'border' => '#f59e0b'],
+                                        'Refusé' => ['bg' => '#fee2e2', 'color' => '#991b1b', 'border' => '#ef4444'],
+                                    ];
+                                    $s = $statut_colors[$demande->statut] ?? ['bg' => '#f3f4f6', 'color' => '#374151', 'border' => '#9ca3af'];
+                                    $modif_en_cours = $modifs_index[$demande->id] ?? null;
+                                    ?>
+                                    <tr data-type="<?php echo esc_attr($demande->type_conge); ?>"
+                                        data-statut="<?php echo esc_attr($demande->statut); ?>"
+                                        data-debut="<?php echo esc_attr($demande->date_debut); ?>"
+                                        data-fin="<?php echo esc_attr($demande->date_fin); ?>">
 
-                                <!-- Raison -->
-                                <?php if (!empty($hm->raison)): ?>
-                                    <div
-                                        style="font-style:italic;font-size:11px;color:#6b7280;line-height:1.4;border-left:2px solid #e5e7eb;padding-left:8px;">
-                                        "<?php echo esc_html($hm->raison); ?>"
-                                    </div>
-                                <?php endif; ?>
+                                        <td><span style="font-weight:600;"><?php echo esc_html($demande->type_conge); ?></span>
+                                        </td>
 
-                                <!-- Date -->
-                                <div
-                                    style="font-size:10px;color:#9ca3af;margin-top:auto;padding-top:6px;border-top:0.5px solid #f3f4f6;">
-                                    Soumis le <?php echo date('d/m/Y à H:i', strtotime($hm->created_at)); ?>
-                                </div>
+                                        <td>
+                                            <?php $moment = $demande->moment_journee ?? 'full'; ?>
+                                            <div style="font-weight:500;">
+                                                <?php echo $moment !== 'full' ? "Le $d_deb" : "Du $d_deb au $d_fin"; ?>
+                                            </div>
+                                            <div style="margin-top:5px;">
+                                                <?php if ($moment === 'matin'): ?>
+                                                    <span
+                                                        style="background:#e3f2fd;color:#1976d2;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid #1976d2;">MATIN</span>
+                                                <?php elseif ($moment === 'apres-midi'): ?>
+                                                    <span
+                                                        style="background:#fff3e0;color:#ef6c00;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid #ef6c00;">APRÈS-MIDI</span>
+                                                <?php else: ?>
+                                                    <span
+                                                        style="background:#f5f5f5;color:#616161;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:bold;border:1px solid #bdbdbd;">
+                                                        <?php echo gcp_get_duree_formattee($demande); ?>
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
 
-                            </div>
-                        <?php endforeach; ?>
+                                        <td>
+                                            <div class="d-flex flex-column gap-1">
+                                                <span
+                                                    style="background:<?php echo $s['bg']; ?>;color:<?php echo $s['color']; ?>;border:1px solid <?php echo $s['border']; ?>;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block;width:fit-content;">
+                                                    <?php echo esc_html($demande->statut); ?>
+                                                </span>
+                                                <?php if ($modif_en_cours): ?>
+                                                    <span
+                                                        style="font-size:10px;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;padding:2px 8px;display:inline-block;width:fit-content;">
+                                                        Modif/Annulation en attente
+                                                    </span>
+                                                <?php elseif (isset($modifs_traitees_index[$demande->id])): ?>
+                                                    <?php
+                                                    $mt = $modifs_traitees_index[$demande->id];
+                                                    $label_action = $mt->type_action === 'Suppression' ? 'Suppression' : 'Modification';
+                                                    ?>
+                                                    <?php if ($mt->statut === 'Validé'): ?>
+                                                        <span
+                                                            style="font-size:10px;color:#065f46;background:#d1fae5;border:1px solid #10b981;border-radius:12px;padding:2px 8px;display:inline-block;width:fit-content;">
+                                                            ✓ <?php echo $label_action; ?> acceptée
+                                                        </span>
+                                                    <?php elseif ($mt->statut === 'Refusé'): ?>
+                                                        <span
+                                                            style="font-size:10px;color:#991b1b;background:#fee2e2;border:1px solid #ef4444;border-radius:12px;padding:2px 8px;display:inline-block;width:fit-content;">
+                                                            ✕ <?php echo $label_action; ?> refusée
+                                                        </span>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
 
-                    </div>
+                                        <td>
+                                            <span style="font-size:13px;color:#6b7280;">
+                                                <?php echo !empty($demande->commentaire_admin) ? esc_html($demande->commentaire_admin) : '<em>—</em>'; ?>
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            <?php if ($modif_en_cours): ?>
+                                                <button class="btn-action btn-voir-modif"
+                                                    style="font-size:10px;padding:4px 8px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;white-space:nowrap;"
+                                                    data-modif='<?php echo esc_attr(json_encode([
+                                                        "type_action" => $modif_en_cours->type_action,
+                                                        "created_at" => date("d/m/Y à H:i", strtotime($modif_en_cours->created_at)),
+                                                        "raison" => $modif_en_cours->raison,
+                                                        "type_conge" => $demande->type_conge,
+                                                        "date_debut" => $d_deb,
+                                                        "date_fin" => $d_fin,
+                                                        "nouveau_type" => $modif_en_cours->nouveau_type ?? "",
+                                                        "nouvelle_date_debut" => !empty($modif_en_cours->nouvelle_date_debut) ? date("d/m/Y", strtotime($modif_en_cours->nouvelle_date_debut)) : "",
+                                                        "nouvelle_date_fin" => !empty($modif_en_cours->nouvelle_date_fin) ? date("d/m/Y", strtotime($modif_en_cours->nouvelle_date_fin)) : "",
+                                                    ])); ?>'>
+                                                    <i data-lucide="clock"
+                                                        style="width:12px;margin-right:3px;vertical-align:middle;"></i>
+                                                    Modif en attente...
+                                                </button>
+                                            <?php elseif ($demande->statut === 'En attente'): ?>
+                                                <button class="action-icon-btn delete" title="Supprimer"
+                                                    onclick="annulerMaDemande(<?php echo $demande->id; ?>)">
+                                                    <i data-lucide="trash-2"></i>
+                                                </button>
+                                            <?php elseif ($demande->statut === 'Validé'): ?>
+                                                <button class="btn-action" style="font-size:10px;padding:4px 8px;"
+                                                    onclick="demanderModification(<?php echo $demande->id; ?>)">
+                                                    <i data-lucide="refresh-cw" style="width:12px;margin-right:4px;"></i>
+                                                    Modif/Annuler
+                                                </button>
+                                            <?php elseif ($demande->statut === 'Refusé'): ?>
+                                                <button class="btn-action btn-refaire-demande"
+                                                    style="font-size:10px;padding:4px 8px;background:#eff6ff;color:#1d4ed8;border:1px solid #3b82f6;white-space:nowrap;"
+                                                    data-type="<?php echo esc_attr($demande->type_conge); ?>"
+                                                    data-debut="<?php echo esc_attr($demande->date_debut); ?>"
+                                                    data-fin="<?php echo esc_attr($demande->date_fin); ?>">
+                                                    <i data-lucide="rotate-ccw"
+                                                        style="width:12px;margin-right:3px;vertical-align:middle;"></i>
+                                                    Refaire
+                                                </button>
+                                            <?php else: ?>
+                                                <span style="color:#d1d5db;">—</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach;
+                            else: ?>
+                                <tr>
+                                    <td colspan="5" class="text-center" style="padding:40px;color:#9ca3af;">
+                                        Aucune demande enregistrée pour le moment ...
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
-            <?php endif; ?>
+
+
+
+            </div><!-- fin panel-demandes -->
+
+            <!-- ===== PANEL 2 : HISTORIQUE DES MODIFICATIONS ===== -->
+            <div id="panel-historique" style="display:none;">
+
+                <!-- Filtres -->
+                <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+                    <select id="filtre-hm-action" onchange="filtrerHistoriqueModifs()"
+                        style="height:36px;padding:0 12px;border:1px solid #e5e7eb;border-radius:8px;background:white;font-size:13px;font-family:inherit;color:#374151;outline:none;">
+                        <option value="">Toutes les actions</option>
+                        <option value="Modification">Modifications</option>
+                        <option value="Suppression">Suppressions</option>
+                    </select>
+
+                    <select id="filtre-hm-statut" onchange="filtrerHistoriqueModifs()"
+                        style="height:36px;padding:0 12px;border:1px solid #e5e7eb;border-radius:8px;background:white;font-size:13px;font-family:inherit;color:#374151;outline:none;">
+                        <option value="">Tous les statuts</option>
+                        <option value="En attente">En attente</option>
+                        <option value="Validé">Validé</option>
+                        <option value="Refusé">Refusé</option>
+                    </select>
+
+                    <button onclick="filtrerHistoriqueModifs('reset')"
+                        style="height:36px;padding:0 12px;border:1px solid #e5e7eb;border-radius:8px;background:white;color:#374151;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="rotate-ccw" style="width:13px;height:13px;"></i>
+                        Reset
+                    </button>
+
+                    <span id="filtre-hm-count" style="font-size:12px;color:#9ca3af;margin-left:auto;">
+                                    <?php echo count($mon_historique_modifs); ?>
+                        entrée<?php echo count($mon_historique_modifs) > 1 ? 's' : ''; ?>
+                    </span>
+                </div>
+
+                <?php if (!empty($mon_historique_modifs)): ?>
+
+                        <div style="display:flex;flex-direction:column;gap:12px;" id="liste-historique-modifs">
+                            <?php foreach ($mon_historique_modifs as $hm):
+                                $is_suppr = ($hm->type_action === 'Suppression');
+                                $is_valide = ($hm->statut === 'Validé');
+                                $is_attente = ($hm->statut === 'En attente');
+
+                                if ($is_attente) {
+                                    $sbg = '#fef3c7';
+                                    $scol = '#92400e';
+                                    $sborder = '#f59e0b';
+                                } elseif ($is_valide) {
+                                    $sbg = '#d1fae5';
+                                    $scol = '#065f46';
+                                    $sborder = '#10b981';
+                                } else {
+                                    $sbg = '#fee2e2';
+                                    $scol = '#991b1b';
+                                    $sborder = '#ef4444';
+                                }
+                                ?>
+                                    <div class="hm-card" data-action="<?php echo esc_attr($hm->type_action); ?>"
+                                        data-statut="<?php echo esc_attr($hm->statut); ?>"
+                                        style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;display:flex;gap:20px;align-items:flex-start;">
+
+                                        <!-- Icône action -->
+                                        <div
+                                            style="width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+                    <?php echo $is_suppr ? 'background:#fee2e2;color:#b91c1c;' : 'background:#fef3c7;color:#92400e;'; ?>">
+                                            <?php if ($is_suppr): ?>
+                                                    <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
+                                            <?php else: ?>
+                                                    <i data-lucide="edit-3" style="width:16px;height:16px;"></i>
+                                            <?php endif; ?>
+                                        </div>
+
+                                        <!-- Contenu -->
+                                        <div style="flex:1;">
+                                            <div
+                                                style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+                                                <div>
+                                                    <span style="font-size:13px;font-weight:700;color:#1f2937;">
+                                                        <?php echo $is_suppr ? 'Demande d\'annulation' : 'Demande de modification'; ?>
+                                                    </span>
+                                                    <div style="font-size:11px;color:#9ca3af;margin-top:2px;">
+                                                        Soumis le <?php echo date('d/m/Y à H:i', strtotime($hm->created_at)); ?>
+                                                    </div>
+                                                </div>
+                                                <span
+                                                    style="font-size:11px;font-weight:600;padding:3px 12px;border-radius:20px;background:<?php echo $sbg; ?>;color:<?php echo $scol; ?>;border:1px solid <?php echo $sborder; ?>;">
+                                                    <?php echo esc_html($hm->statut); ?>
+                                                </span>
+                                            </div>
+
+                                            <!-- Avant / Après -->
+                                            <div
+                                                style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:10px;">
+                                                <div>
+                                                    <div
+                                                        style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;margin-bottom:3px;">
+                                                        Congé concerné</div>
+                                                    <div
+                                                        style="font-size:12px;color:#dc2626;text-decoration:line-through;font-weight:500;">
+                                                        <?php echo esc_html($hm->type_conge); ?> ·
+                                                        <?php echo date('d/m', strtotime($hm->date_debut)); ?> →
+                                                        <?php echo date('d/m', strtotime($hm->date_fin)); ?>
+                                                    </div>
+                                                </div>
+                                                <div style="font-size:18px;color:#d1d5db;">→</div>
+                                                <div>
+                                                    <div
+                                                        style="font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;margin-bottom:3px;">
+                                                        <?php echo $is_suppr ? 'Résultat' : 'Nouvelles dates'; ?>
+                                                    </div>
+                                                    <div style="font-size:12px;color:#059669;font-weight:500;">
+                                                        <?php if ($is_suppr): ?>
+                                                                Suppression du congé
+                                                        <?php else: ?>
+                                                                <?php echo !empty($hm->nouveau_type) ? esc_html($hm->nouveau_type) : esc_html($hm->type_conge); ?>
+                                                                ·
+                                                                <?php echo !empty($hm->nouvelle_date_debut) ? date('d/m', strtotime($hm->nouvelle_date_debut)) : '—'; ?>
+                                                                →
+                                                                <?php echo !empty($hm->nouvelle_date_fin) ? date('d/m', strtotime($hm->nouvelle_date_fin)) : '—'; ?>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Motif -->
+                                            <?php if (!empty($hm->raison)): ?>
+                                                    <div
+                                                        style="font-style:italic;font-size:12px;color:#6b7280;border-left:3px solid #e5e7eb;padding-left:10px;">
+                                                        "<?php echo esc_html($hm->raison); ?>"
+                                                    </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                <?php else: ?>
+                        <div style="text-align:center;padding:60px 20px;color:#9ca3af;">
+                            <i data-lucide="inbox"
+                                style="width:40px;height:40px;margin-bottom:12px;display:block;margin-inline:auto;"></i>
+                            <p style="font-size:14px;">Aucune demande de modification pour le moment.</p>
+                        </div>
+                <?php endif; ?>
+
+            </div><!-- fin panel-historique -->
 
         </section>
 
@@ -703,117 +790,117 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
         <!-- -- -- -- -- -- GESTION DES UTILISATEURS -- -- -- -- --  -->
 
         <?php if (current_user_can('manage_options')): ?>
-            <section id="gestion_users" class="tab-content">
-                <div class="admin-grid">
-                    <div class="admin-main">
-                        <div class="header-flex d-flex justify-content-between align-items-center mb-3">
-                            <h1>Gestion de l'Équipe</h1>
-                            <div class="d-flex gap-2">
-                                <button class="btn-submit" id="btn-open-add-user"
-                                    style="width:auto;padding:8px 20px;font-size:13px;"><i data-lucide="user-plus"></i>
-                                    Nouveau Collaborateur</button>
+                <section id="gestion_users" class="tab-content">
+                    <div class="admin-grid">
+                        <div class="admin-main">
+                            <div class="header-flex d-flex justify-content-between align-items-center mb-3">
+                                <h1>Gestion de l'Équipe</h1>
+                                <div class="d-flex gap-2">
+                                    <button class="btn-submit" id="btn-open-add-user"
+                                        style="width:auto;padding:8px 20px;font-size:13px;"><i data-lucide="user-plus"></i>
+                                        Nouveau Collaborateur</button>
+                                </div>
+                            </div>
+                            <div class="search-box mb-3">
+                                <input type="text" id="user-search" class="form-control"
+                                    placeholder="Rechercher un collaborateur ... ">
+                            </div>
+                            <div class="user-list-container">
+                                <?php
+                                $users = get_users(array('orderby' => 'display_name'));
+                                if (!empty($users)):
+                                    foreach ($users as $user):
+                                        $cp = get_user_meta($user->ID, 'gcp_solde_cp', true) ?: 0;
+                                        $rtt = get_user_meta($user->ID, 'gcp_solde_rtt', true) ?: 0;
+                                        ?>
+                                                <div class="user-row-item" data-id="<?php echo $user->ID; ?>"
+                                                    data-name="<?php echo strtolower(esc_attr($user->display_name)); ?>">
+                                                    <div class="user-main-info">
+                                                        <div class="user-avatar-circle">
+                                                            <?php echo strtoupper(substr($user->display_name, 0, 1)); ?>
+                                                        </div>
+                                                        <div class="user-text-details">
+                                                            <span class="user-name-label"><?php echo esc_html($user->display_name); ?></span>
+                                                            <span class="user-email-sub"><?php echo esc_html($user->user_email); ?></span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="user-stats-mini">
+                                                        <span class="mini-badge-cp"><?php echo $cp; ?> CP</span>
+                                                        <span class="mini-badge-rtt"><?php echo $rtt; ?> RTT</span>
+                                                    </div>
+                                                    <div class="user-row-actions">
+                                                        <button class="action-icon-btn edit btn-edit-user" title="Modifier"
+                                                            data-user='<?php echo json_encode(["id" => $user->ID, "name" => $user->display_name, "email" => $user->user_email, "cp" => $cp, "rtt" => $rtt]); ?>'>
+                                                            <i data-lucide="edit-2"></i>
+                                                        </button>
+                                                        <button class="action-icon-btn delete" title="Supprimer"
+                                                            onclick="supprimerCollaborateur(<?php echo $user->ID; ?>, '<?php echo esc_js($user->display_name); ?>')">
+                                                            <i data-lucide="trash-2"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                        <?php endforeach;
+                                else: ?>
+                                        <p class="p-4 text-center">Aucun collaborateur trouvé.</p>
+                                <?php endif; ?>
                             </div>
                         </div>
-                        <div class="search-box mb-3">
-                            <input type="text" id="user-search" class="form-control"
-                                placeholder="Rechercher un collaborateur ... ">
-                        </div>
-                        <div class="user-list-container">
-                            <?php
-                            $users = get_users(array('orderby' => 'display_name'));
-                            if (!empty($users)):
-                                foreach ($users as $user):
-                                    $cp = get_user_meta($user->ID, 'gcp_solde_cp', true) ?: 0;
-                                    $rtt = get_user_meta($user->ID, 'gcp_solde_rtt', true) ?: 0;
-                                    ?>
-                                    <div class="user-row-item" data-id="<?php echo $user->ID; ?>"
-                                        data-name="<?php echo strtolower(esc_attr($user->display_name)); ?>">
-                                        <div class="user-main-info">
-                                            <div class="user-avatar-circle">
-                                                <?php echo strtoupper(substr($user->display_name, 0, 1)); ?>
-                                            </div>
-                                            <div class="user-text-details">
-                                                <span class="user-name-label"><?php echo esc_html($user->display_name); ?></span>
-                                                <span class="user-email-sub"><?php echo esc_html($user->user_email); ?></span>
-                                            </div>
-                                        </div>
-                                        <div class="user-stats-mini">
-                                            <span class="mini-badge-cp"><?php echo $cp; ?> CP</span>
-                                            <span class="mini-badge-rtt"><?php echo $rtt; ?> RTT</span>
-                                        </div>
-                                        <div class="user-row-actions">
-                                            <button class="action-icon-btn edit btn-edit-user" title="Modifier"
-                                                data-user='<?php echo json_encode(["id" => $user->ID, "name" => $user->display_name, "email" => $user->user_email, "cp" => $cp, "rtt" => $rtt]); ?>'>
-                                                <i data-lucide="edit-2"></i>
-                                            </button>
-                                            <button class="action-icon-btn delete" title="Supprimer"
-                                                onclick="supprimerCollaborateur(<?php echo $user->ID; ?>, '<?php echo esc_js($user->display_name); ?>')">
-                                                <i data-lucide="trash-2"></i>
-                                            </button>
-                                        </div>
+                        <div class="admin-sidebar" id="edit-panel">
+                            <div class="sidebar-placeholder"><i data-lucide="user-cog"></i>
+                                <p>Sélectionnez un collaborateur ou créez en un nouveau</p>
+                            </div>
+                            <div class="sidebar-content" style="display:none;">
+                                <div class="sidebar-header-flex"
+                                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
+                                    <h2 id="panel-title" style="margin:0; font-weight:700; font-size: 1.5rem;">Modifier</h2>
+                                    <i data-lucide="x" class="close-icon" id="btn-close-edit-panel"
+                                        style="cursor:pointer; width:22px; height:22px;"></i>
+                                </div>
+
+                                <form id="form-admin-user-global">
+                                    <input type="hidden" name="target_user_id" id="edit-user-id">
+                                    <input type="hidden" id="form-mode" value="update">
+                                    <div class="form-group mb-2"><label>Nom d'affichage</label><input type="text"
+                                            name="display_name" id="edit-display-name" required></div>
+                                    <div class="form-group mb-2"><label>Email (Identifiant)</label><input type="email"
+                                            name="user_email" id="edit-email" required></div>
+                                    <div id="password-field-container" class="form-group mb-2" style="display:none;"><label>Mot
+                                            de passe provisoire</label><input type="password" name="password"
+                                            id="edit-password"></div>
+                                    <div class="row-inputs d-flex gap-2">
+                                        <div class="form-group flex-grow-1"><label>Solde CP</label><input type="number"
+                                                step="0.5" name="new_cp" id="edit-cp" value="0"></div>
+                                        <div class="form-group flex-grow-1"><label>Solde RTT</label><input type="number"
+                                                step="0.5" name="new_rtt" id="edit-rtt" value="0"></div>
                                     </div>
-                                <?php endforeach;
-                            else: ?>
-                                <p class="p-4 text-center">Aucun collaborateur trouvé.</p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <div class="admin-sidebar" id="edit-panel">
-                        <div class="sidebar-placeholder"><i data-lucide="user-cog"></i>
-                            <p>Sélectionnez un collaborateur ou créez en un nouveau</p>
-                        </div>
-                        <div class="sidebar-content" style="display:none;">
-                            <div class="sidebar-header-flex"
-                                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
-                                <h2 id="panel-title" style="margin:0; font-weight:700; font-size: 1.5rem;">Modifier</h2>
-                                <i data-lucide="x" class="close-icon" id="btn-close-edit-panel"
-                                    style="cursor:pointer; width:22px; height:22px;"></i>
-                            </div>
-
-                            <form id="form-admin-user-global">
-                                <input type="hidden" name="target_user_id" id="edit-user-id">
-                                <input type="hidden" id="form-mode" value="update">
-                                <div class="form-group mb-2"><label>Nom d'affichage</label><input type="text"
-                                        name="display_name" id="edit-display-name" required></div>
-                                <div class="form-group mb-2"><label>Email (Identifiant)</label><input type="email"
-                                        name="user_email" id="edit-email" required></div>
-                                <div id="password-field-container" class="form-group mb-2" style="display:none;"><label>Mot
-                                        de passe provisoire</label><input type="password" name="password"
-                                        id="edit-password"></div>
-                                <div class="row-inputs d-flex gap-2">
-                                    <div class="form-group flex-grow-1"><label>Solde CP</label><input type="number"
-                                            step="0.5" name="new_cp" id="edit-cp" value="0"></div>
-                                    <div class="form-group flex-grow-1"><label>Solde RTT</label><input type="number"
-                                            step="0.5" name="new_rtt" id="edit-rtt" value="0"></div>
-                                </div>
-                                <button type="submit" class="btn-submit mt-3">Enregistrer</button>
-                                <button type="button" id="btn-export-single-user" class="btn-action mt-2 w-100"
-                                    style="height: 40px; justify-content: center; gap: 8px; border: 1px solid var(--bordure); ">
-                                    <i data-lucide="file-text" style="width: 16px;"></i>
-                                    <span>Exporter ce collaborateur (CSV)</span>
-                                </button>
-                            </form>
-                            <hr class="my-4">
-                            <div class="user-history-section">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h3 class="h6 fw-bold mb-0"><i data-lucide="history" class="me-2"></i>Historique</h3>
-                                    <button type="button" id="btn-reset-history"
-                                        class="text-danger border-0 bg-transparent p-0 small fw-bold"
-                                        style="font-size: 11px; cursor: pointer; display: none;">
-                                        <i data-lucide="trash-2" style="width: 12px; vertical-align: middle;"></i>
-                                        Réinitialiser
+                                    <button type="submit" class="btn-submit mt-3">Enregistrer</button>
+                                    <button type="button" id="btn-export-single-user" class="btn-action mt-2 w-100"
+                                        style="height: 40px; justify-content: center; gap: 8px; border: 1px solid var(--bordure); ">
+                                        <i data-lucide="file-text" style="width: 16px;"></i>
+                                        <span>Exporter ce collaborateur (CSV)</span>
                                     </button>
-                                </div>
+                                </form>
+                                <hr class="my-4">
+                                <div class="user-history-section">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h3 class="h6 fw-bold mb-0"><i data-lucide="history" class="me-2"></i>Historique</h3>
+                                        <button type="button" id="btn-reset-history"
+                                            class="text-danger border-0 bg-transparent p-0 small fw-bold"
+                                            style="font-size: 11px; cursor: pointer; display: none;">
+                                            <i data-lucide="trash-2" style="width: 12px; vertical-align: middle;"></i>
+                                            Réinitialiser
+                                        </button>
+                                    </div>
 
-                                <div id="history-loader" style="display:none;" class="text-center p-3">
-                                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                                    <div id="history-loader" style="display:none;" class="text-center p-3">
+                                        <div class="spinner-border spinner-border-sm text-primary"></div>
+                                    </div>
+                                    <ul id="user-leave-list" class="list-group list-group-flush small"></ul>
                                 </div>
-                                <ul id="user-leave-list" class="list-group list-group-flush small"></ul>
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
         <?php endif; ?>
 
         <!-- -- -- -- -- -- CONFIGURATION DU PLUGIN -- -- -- -- --  -->
@@ -900,10 +987,10 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
                         <div class="d-flex flex-wrap gap-2">
                             <?php $available_types = ['CP' => 'Congés Payés', 'RTT' => 'RTT', 'Maladie' => 'Maladie', 'Sans Solde' => 'Sans Solde', 'Evenement' => 'Évènements'];
                             foreach ($available_types as $key => $label): ?>
-                                <label class="chip-select">
-                                    <input type="checkbox" name="types_enabled[]" value="<?php echo $key; ?>" <?php checked(in_array($key, $settings['types_enabled']), true); ?>>
-                                    <span class="chip-label"><?php echo $label; ?></span>
-                                </label>
+                                    <label class="chip-select">
+                                        <input type="checkbox" name="types_enabled[]" value="<?php echo $key; ?>" <?php checked(in_array($key, $settings['types_enabled']), true); ?>>
+                                        <span class="chip-label"><?php echo $label; ?></span>
+                                    </label>
                             <?php endforeach; ?>
                         </div>
                     </div>
@@ -1020,58 +1107,58 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
             <div class="user-list-container">
                 <?php if (!empty($all_pending)):
                     foreach ($all_pending as $val): ?>
-                        <div class="user-row-item" data-id="<?php echo $val->id; ?>"
-                            data-debut="<?php echo $val->date_debut; ?>" style="grid-template-columns: 1.2fr 1fr 1.5fr 100px;">
+                                <div class="user-row-item" data-id="<?php echo $val->id; ?>"
+                                    data-debut="<?php echo $val->date_debut; ?>" style="grid-template-columns: 1.2fr 1fr 1.5fr 100px;">
 
-                            <div class="user-main-info">
-                                <div class="user-avatar-circle" style="background:#f3f4f6; color:#374151;">
-                                    <?php echo strtoupper(substr($val->display_name, 0, 1)); ?>
-                                </div>
-                                <div class="user-text-details">
-                                    <span class="user-name-label"><?php echo esc_html($val->display_name); ?></span>
-                                    <span class="user-email-sub"><?php echo esc_html($val->type_conge); ?></span>
+                                    <div class="user-main-info">
+                                        <div class="user-avatar-circle" style="background:#f3f4f6; color:#374151;">
+                                            <?php echo strtoupper(substr($val->display_name, 0, 1)); ?>
+                                        </div>
+                                        <div class="user-text-details">
+                                            <span class="user-name-label"><?php echo esc_html($val->display_name); ?></span>
+                                            <span class="user-email-sub"><?php echo esc_html($val->type_conge); ?></span>
 
-                                    <?php if (!empty($val->justificatif)): ?>
-                                        <a href="<?php echo esc_url($val->justificatif); ?>" target="_blank"
-                                            class="badge bg-info text-white mt-1" style="text-decoration:none;">
-                                            <i data-lucide="paperclip" style="width:12px;"></i> Voir la pièce jointe
-                                        </a>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-
-                            <div class="user-stats-mini">
-                                <div style="font-size: 13px; font-weight: 600;">
-                                    Du <?php echo date('d/m/Y', strtotime($val->date_debut)); ?><br>
-                                    au <?php echo date('d/m/Y', strtotime($val->date_fin)); ?>
-                                </div>
-                            </div>
-
-                            <div style="padding: 0 10px;">
-                                <?php if (!empty($val->motif)): ?>
-                                    <div style="font-size: 11px; color: var(--texte-gris); margin-bottom: 4px;">Motif :
-                                        <?php echo esc_html($val->motif); ?>
+                                            <?php if (!empty($val->justificatif)): ?>
+                                                    <a href="<?php echo esc_url($val->justificatif); ?>" target="_blank"
+                                                        class="badge bg-info text-white mt-1" style="text-decoration:none;">
+                                                        <i data-lucide="paperclip" style="width:12px;"></i> Voir la pièce jointe
+                                                    </a>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
-                                <?php endif; ?>
-                                <input type="text" class="comm-admin" placeholder="Réponse (optionnel)..."
-                                    style="width:100%; border:1px solid var(--bordure); border-radius:6px; padding:6px; font-size:12px;">
-                            </div>
 
-                            <div class="user-row-actions">
-                                <button class="action-icon-btn edit" onclick="validerDemande(<?php echo $val->id; ?>, 'Validé')"
-                                    title="Valider">
-                                    <i data-lucide="check" style="color:var(--success);"></i>
-                                </button>
-                                <button class="action-icon-btn delete"
-                                    onclick="validerDemande(<?php echo $val->id; ?>, 'Refusé')" title="Refuser">
-                                    <i data-lucide="x" style="color:var(--danger);"></i>
-                                </button>
-                            </div>
+                                    <div class="user-stats-mini">
+                                        <div style="font-size: 13px; font-weight: 600;">
+                                            Du <?php echo date('d/m/Y', strtotime($val->date_debut)); ?><br>
+                                            au <?php echo date('d/m/Y', strtotime($val->date_fin)); ?>
+                                        </div>
+                                    </div>
 
-                        </div>
-                    <?php endforeach;
+                                    <div style="padding: 0 10px;">
+                                        <?php if (!empty($val->motif)): ?>
+                                                <div style="font-size: 11px; color: var(--texte-gris); margin-bottom: 4px;">Motif :
+                                                    <?php echo esc_html($val->motif); ?>
+                                                </div>
+                                        <?php endif; ?>
+                                        <input type="text" class="comm-admin" placeholder="Réponse (optionnel)..."
+                                            style="width:100%; border:1px solid var(--bordure); border-radius:6px; padding:6px; font-size:12px;">
+                                    </div>
+
+                                    <div class="user-row-actions">
+                                        <button class="action-icon-btn edit" onclick="validerDemande(<?php echo $val->id; ?>, 'Validé')"
+                                            title="Valider">
+                                            <i data-lucide="check" style="color:var(--success);"></i>
+                                        </button>
+                                        <button class="action-icon-btn delete"
+                                            onclick="validerDemande(<?php echo $val->id; ?>, 'Refusé')" title="Refuser">
+                                            <i data-lucide="x" style="color:var(--danger);"></i>
+                                        </button>
+                                    </div>
+
+                                </div>
+                        <?php endforeach;
                 else: ?>
-                    <p class="p-5 text-center text-muted small">Aucune demande d'absence en attente ...</p>
+                        <p class="p-5 text-center text-muted small">Aucune demande d'absence en attente ...</p>
                 <?php endif; ?>
             </div>
         </section>
@@ -1136,85 +1223,85 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
 
                         if (!empty($modifs)):
                             foreach ($modifs as $m): ?>
-                                <div class="modif-row p-3 border-bottom"
-                                    data-user="<?php echo strtolower(esc_attr($m->display_name)); ?>"
-                                    data-action="<?php echo esc_attr($m->type_action); ?>">
+                                        <div class="modif-row p-3 border-bottom"
+                                            data-user="<?php echo strtolower(esc_attr($m->display_name)); ?>"
+                                            data-action="<?php echo esc_attr($m->type_action); ?>">
 
-                                    <!-- Ligne du haut : avatar + nom + badge + date -->
-                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                        <div class="user-avatar-circle"
-                                            style="background:#fef3c7;color:#92400e;width:34px;height:34px;font-size:13px;flex-shrink:0;">
-                                            <?php echo strtoupper(substr($m->display_name, 0, 1)); ?>
-                                        </div>
-                                        <div class="flex-grow-1">
-                                            <span class="fw-bold"
-                                                style="font-size:13px;"><?php echo esc_html($m->display_name); ?></span>
-                                            <span
-                                                class="badge ms-1 <?php echo ($m->type_action === 'Suppression' ? 'bg-danger-subtle text-danger' : 'bg-warning-subtle text-warning'); ?>"
-                                                style="font-size:10px; border:1px solid currentColor;">
-                                                <?php echo ($m->type_action === 'Suppression' ? 'ANNULATION' : 'MODIFICATION'); ?>
-                                            </span>
-                                            <div style="font-size:10px;color:#9ca3af;">
-                                                Demandé le <?php echo date('d/m/Y', strtotime($m->created_at)); ?>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Bloc avant / après -->
-                                    <div
-                                        style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
-                                        <div>
-                                            <div
-                                                style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
-                                                Congé actuel</div>
-                                            <div style="font-size:12px;color:#dc2626;text-decoration:line-through;">
-                                                <?php echo $m->type_conge; ?> ·
-                                                <?php echo date('d/m', strtotime($m->date_debut)); ?> →
-                                                <?php echo date('d/m', strtotime($m->date_fin)); ?>
-                                            </div>
-                                        </div>
-                                        <div style="font-size:14px;color:#9ca3af;">→</div>
-                                        <div>
-                                            <?php if ($m->type_action === 'Suppression'): ?>
-                                                <div
-                                                    style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
-                                                    Après annulation</div>
-                                                <div style="font-size:12px;color:#059669;">Supprimé</div>
-                                            <?php else: ?>
-                                                <div
-                                                    style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
-                                                    Nouvelles dates</div>
-                                                <div style="font-size:12px;color:#059669;">
-                                                    <?php echo (!empty($m->nouveau_type) ? $m->nouveau_type : $m->type_conge); ?>
-                                                    ·
-                                                    <?php echo (!empty($m->nouvelle_date_debut) ? date('d/m', strtotime($m->nouvelle_date_debut)) : '—'); ?>
-                                                    →
-                                                    <?php echo (!empty($m->nouvelle_date_fin) ? date('d/m', strtotime($m->nouvelle_date_fin)) : '—'); ?>
+                                            <!-- Ligne du haut : avatar + nom + badge + date -->
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <div class="user-avatar-circle"
+                                                    style="background:#fef3c7;color:#92400e;width:34px;height:34px;font-size:13px;flex-shrink:0;">
+                                                    <?php echo strtoupper(substr($m->display_name, 0, 1)); ?>
                                                 </div>
-                                            <?php endif; ?>
+                                                <div class="flex-grow-1">
+                                                    <span class="fw-bold"
+                                                        style="font-size:13px;"><?php echo esc_html($m->display_name); ?></span>
+                                                    <span
+                                                        class="badge ms-1 <?php echo ($m->type_action === 'Suppression' ? 'bg-danger-subtle text-danger' : 'bg-warning-subtle text-warning'); ?>"
+                                                        style="font-size:10px; border:1px solid currentColor;">
+                                                        <?php echo ($m->type_action === 'Suppression' ? 'ANNULATION' : 'MODIFICATION'); ?>
+                                                    </span>
+                                                    <div style="font-size:10px;color:#9ca3af;">
+                                                        Demandé le <?php echo date('d/m/Y', strtotime($m->created_at)); ?>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Bloc avant / après -->
+                                            <div
+                                                style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+                                                <div>
+                                                    <div
+                                                        style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
+                                                        Congé actuel</div>
+                                                    <div style="font-size:12px;color:#dc2626;text-decoration:line-through;">
+                                                        <?php echo $m->type_conge; ?> ·
+                                                        <?php echo date('d/m', strtotime($m->date_debut)); ?> →
+                                                        <?php echo date('d/m', strtotime($m->date_fin)); ?>
+                                                    </div>
+                                                </div>
+                                                <div style="font-size:14px;color:#9ca3af;">→</div>
+                                                <div>
+                                                    <?php if ($m->type_action === 'Suppression'): ?>
+                                                            <div
+                                                                style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
+                                                                Après annulation</div>
+                                                            <div style="font-size:12px;color:#059669;">Supprimé</div>
+                                                    <?php else: ?>
+                                                            <div
+                                                                style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
+                                                                Nouvelles dates</div>
+                                                            <div style="font-size:12px;color:#059669;">
+                                                                <?php echo (!empty($m->nouveau_type) ? $m->nouveau_type : $m->type_conge); ?>
+                                                                ·
+                                                                <?php echo (!empty($m->nouvelle_date_debut) ? date('d/m', strtotime($m->nouvelle_date_debut)) : '—'); ?>
+                                                                →
+                                                                <?php echo (!empty($m->nouvelle_date_fin) ? date('d/m', strtotime($m->nouvelle_date_fin)) : '—'); ?>
+                                                            </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+
+                                            <!-- Raison -->
+                                            <div style="font-style:italic;font-size:11px;color:#6b7280;margin-bottom:10px;">
+                                                "<?php echo esc_html($m->raison); ?>"
+                                            </div>
+
+                                            <!-- Boutons -->
+                                            <div class="d-flex gap-2 justify-content-end">
+                                                <button class="btn btn-sm btn-success"
+                                                    onclick="traiterModif(<?php echo $m->id; ?>, 'Validé')">
+                                                    <i data-lucide="check" style="width:13px;"></i> Valider
+                                                </button>
+                                                <button class="btn btn-sm btn-danger"
+                                                    onclick="traiterModif(<?php echo $m->id; ?>, 'Refusé')">
+                                                    <i data-lucide="x" style="width:13px;"></i> Refuser
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    <!-- Raison -->
-                                    <div style="font-style:italic;font-size:11px;color:#6b7280;margin-bottom:10px;">
-                                        "<?php echo esc_html($m->raison); ?>"
-                                    </div>
-
-                                    <!-- Boutons -->
-                                    <div class="d-flex gap-2 justify-content-end">
-                                        <button class="btn btn-sm btn-success"
-                                            onclick="traiterModif(<?php echo $m->id; ?>, 'Validé')">
-                                            <i data-lucide="check" style="width:13px;"></i> Valider
-                                        </button>
-                                        <button class="btn btn-sm btn-danger"
-                                            onclick="traiterModif(<?php echo $m->id; ?>, 'Refusé')">
-                                            <i data-lucide="x" style="width:13px;"></i> Refuser
-                                        </button>
-                                    </div>
-                                </div>
-                            <?php endforeach;
+                                <?php endforeach;
                         else: ?>
-                            <p class="p-5 text-center text-muted small">Aucune demande en attente.</p>
+                                <p class="p-5 text-center text-muted small">Aucune demande en attente.</p>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1245,74 +1332,74 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
                             $badge_class = $is_valide ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger';
                             $badge_border = $is_valide ? '#10b981' : '#ef4444';
                             ?>
-                            <div class="p-3 border-bottom">
-                                <!-- Haut : avatar + nom + date + statut -->
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="user-avatar-circle"
-                                            style="background:#f3f4f6;color:#374151;width:30px;height:30px;font-size:11px;flex-shrink:0;">
-                                            <?php echo strtoupper(substr($h->display_name, 0, 1)); ?>
-                                        </div>
-                                        <div>
-                                            <div class="fw-bold" style="font-size:13px;">
-                                                <?php echo esc_html($h->display_name); ?>
+                                    <div class="p-3 border-bottom">
+                                        <!-- Haut : avatar + nom + date + statut -->
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="user-avatar-circle"
+                                                    style="background:#f3f4f6;color:#374151;width:30px;height:30px;font-size:11px;flex-shrink:0;">
+                                                    <?php echo strtoupper(substr($h->display_name, 0, 1)); ?>
+                                                </div>
+                                                <div>
+                                                    <div class="fw-bold" style="font-size:13px;">
+                                                        <?php echo esc_html($h->display_name); ?>
+                                                    </div>
+                                                    <div style="font-size:10px;color:#9ca3af;">Traité le
+                                                        <?php echo date('d/m/Y', strtotime($h->created_at)); ?>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div style="font-size:10px;color:#9ca3af;">Traité le
-                                                <?php echo date('d/m/Y', strtotime($h->created_at)); ?>
-                                            </div>
+                                            <span class="badge <?php echo $badge_class; ?>"
+                                                style="font-size:11px;border:1px solid <?php echo $badge_border; ?>;">
+                                                <?php echo esc_html($h->statut); ?>
+                                            </span>
                                         </div>
-                                    </div>
-                                    <span class="badge <?php echo $badge_class; ?>"
-                                        style="font-size:11px;border:1px solid <?php echo $badge_border; ?>;">
-                                        <?php echo esc_html($h->statut); ?>
-                                    </span>
-                                </div>
 
-                                <!-- Bloc avant / après -->
-                                <div
-                                    style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
-                                    <div>
+                                        <!-- Bloc avant / après -->
                                         <div
-                                            style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
-                                            Avant</div>
-                                        <div style="font-size:11px;color:#dc2626;text-decoration:line-through;">
-                                            <?php echo $h->type_conge; ?> ·
-                                            <?php echo date('d/m', strtotime($h->date_debut)); ?> →
-                                            <?php echo date('d/m', strtotime($h->date_fin)); ?>
+                                            style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;background:#f9fafb;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+                                            <div>
+                                                <div
+                                                    style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
+                                                    Avant</div>
+                                                <div style="font-size:11px;color:#dc2626;text-decoration:line-through;">
+                                                    <?php echo $h->type_conge; ?> ·
+                                                    <?php echo date('d/m', strtotime($h->date_debut)); ?> →
+                                                    <?php echo date('d/m', strtotime($h->date_fin)); ?>
+                                                </div>
+                                            </div>
+                                            <div style="font-size:13px;color:#9ca3af;">→</div>
+                                            <div>
+                                                <?php if ($h->type_action === 'Suppression'): ?>
+                                                        <div
+                                                            style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
+                                                            Après</div>
+                                                        <div style="font-size:11px;color:<?php echo $is_valide ? '#059669' : '#9ca3af'; ?>;">
+                                                            <?php echo $is_valide ? 'Supprimé' : 'Non traité'; ?>
+                                                        </div>
+                                                <?php else: ?>
+                                                        <div
+                                                            style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
+                                                            Demande modif.</div>
+                                                        <div style="font-size:11px;color:<?php echo $is_valide ? '#059669' : '#9ca3af'; ?>;">
+                                                            <?php echo (!empty($h->nouveau_type) ? $h->nouveau_type : $h->type_conge); ?>
+                                                            ·
+                                                            <?php echo (!empty($h->nouvelle_date_debut) ? date('d/m', strtotime($h->nouvelle_date_debut)) : '—'); ?>
+                                                            →
+                                                            <?php echo (!empty($h->nouvelle_date_fin) ? date('d/m', strtotime($h->nouvelle_date_fin)) : '—'); ?>
+                                                        </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+
+                                        <!-- Raison -->
+                                        <div style="font-style:italic;font-size:11px;color:#9ca3af;">
+                                            "<?php echo esc_html($h->raison); ?>"
                                         </div>
                                     </div>
-                                    <div style="font-size:13px;color:#9ca3af;">→</div>
-                                    <div>
-                                        <?php if ($h->type_action === 'Suppression'): ?>
-                                            <div
-                                                style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
-                                                Après</div>
-                                            <div style="font-size:11px;color:<?php echo $is_valide ? '#059669' : '#9ca3af'; ?>;">
-                                                <?php echo $is_valide ? 'Supprimé' : 'Non traité'; ?>
-                                            </div>
-                                        <?php else: ?>
-                                            <div
-                                                style="font-size:10px;font-weight:500;color:#9ca3af;text-transform:uppercase;margin-bottom:2px;">
-                                                Demande modif.</div>
-                                            <div style="font-size:11px;color:<?php echo $is_valide ? '#059669' : '#9ca3af'; ?>;">
-                                                <?php echo (!empty($h->nouveau_type) ? $h->nouveau_type : $h->type_conge); ?>
-                                                ·
-                                                <?php echo (!empty($h->nouvelle_date_debut) ? date('d/m', strtotime($h->nouvelle_date_debut)) : '—'); ?>
-                                                →
-                                                <?php echo (!empty($h->nouvelle_date_fin) ? date('d/m', strtotime($h->nouvelle_date_fin)) : '—'); ?>
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-
-                                <!-- Raison -->
-                                <div style="font-style:italic;font-size:11px;color:#9ca3af;">
-                                    "<?php echo esc_html($h->raison); ?>"
-                                </div>
-                            </div>
-                        <?php endforeach;
+                            <?php endforeach;
                     else: ?>
-                        <p class="p-5 text-center text-muted small">Aucune décision dans l'historique.</p>
+                            <p class="p-5 text-center text-muted small">Aucune décision dans l'historique.</p>
                     <?php endif; ?>
                 </div>
 
@@ -1506,7 +1593,12 @@ $is_admin = in_array('administrator', (array) $current_user->roles);
     </script>
     <script src="<?php echo plugin_dir_url(__FILE__) . 'assets/js/index.js'; ?>"></script>
     <script>
-        lucide.createIcons();
+        // On attend que tout soit chargé avant d'initialiser les icônes
+        document.addEventListener("DOMContentLoaded", function () {
+            lucide.createIcons();
+            // Re-créer les icônes après un délai pour les sections cachées
+            setTimeout(() => lucide.createIcons(), 300);
+        });
     </script>
 
 </body>

@@ -2440,3 +2440,9 @@ main.container {
   color: #4338ca;
   border: 1px solid #c7d2fe;
 }
+.menu-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
